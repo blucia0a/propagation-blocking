@@ -9,12 +9,15 @@
 #include <unistd.h>
 #include <errno.h>
 
-#define V_NAME_LEN 8
+#include "pb.h"
+
 
 unsigned long num_edges;
 void write_rand_el_file(char *f){
 
   struct stat stat;
+ 
+  /*open file*/
   int fd = open(f,  O_CREAT | O_RDWR | O_TRUNC, (mode_t) 0x0777);
   if( fd == -1 ){  
 
@@ -22,6 +25,8 @@ void write_rand_el_file(char *f){
     exit(-1); 
 
   }
+
+  /*Seek to end and write dummy byte to make filesize large enough*/
   if(lseek(fd, num_edges * sizeof(unsigned long) * 2 - 1, SEEK_SET) == -1){
     fprintf(stderr,"seek error\n");
     exit(-1);
@@ -32,6 +37,7 @@ void write_rand_el_file(char *f){
     exit(-1);
   }
 
+  /*Map big empty file into memory*/
   char *el = 
     mmap(NULL, num_edges * sizeof(unsigned long) * 2, 
           PROT_READ | PROT_WRITE | PROT_EXEC, MAP_SHARED, fd, 0);
@@ -46,19 +52,27 @@ void write_rand_el_file(char *f){
   unsigned long *edges = malloc(sizeof(unsigned long) * num_edges * 2);  
   for(int i = 0; i < num_edges * 2; i += 2){
 
-    edges[i] = rand(); 
-    edges[i+1] = rand();
+    edges[i] = rand() % MAX_VTX; 
+    edges[i+1] = rand() % MAX_VTX;
 
   }
+
+  /*Copy from edges in memory to edges in file*/
   printf ("Done.\n");
   printf ("Copying to file...");
   memcpy(el, edges, num_edges * sizeof(unsigned long) * 2);
+
+  /*Sync to flush data*/
   printf ("Done.\n");
   printf ("Syncing file...");
   msync(el, num_edges * sizeof(unsigned long) * 2, MS_SYNC);
+
+  /*unmap output file*/
   printf ("Done.\n");
   printf ("Unmapping file...");
   munmap(el, num_edges * sizeof(unsigned long) * 2);
+
+  /*close file*/
   printf ("Done.\n");
   close(fd);
 

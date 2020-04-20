@@ -1,4 +1,4 @@
-#define MAX_VTX 10000000
+#define MAX_VTX 100000
 #define V_NAME_LEN 8
 #define NUM_BINS 256
 

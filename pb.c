@@ -5,35 +5,22 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <string.h>
+#include <unistd.h>
+#include <errno.h>
 
-#define V_NAME_LEN 8
-#define NUM_BINS 256
-
-#define v2bin(x) (x % NUM_BINS)
-#define e2bin(x,y) (x % NUM_BINS)
-#define e2key(x,y) (x)
-#define e2val(x,y) (y)
-
-typedef unsigned long vertex_t;
-typedef unsigned long val_t;
-typedef struct edge {
-  vertex_t src;
-  vertex_t dst;
-} edge_t;
-
-typedef struct bin_elem{
-  vertex_t key;
-  val_t val;
-} bin_elem_t;
+#include "pb.h"
 
 int num_edges;
 int bin_sz[NUM_BINS];
 bin_elem_t *bins[NUM_BINS];
 
+int fd; /*graph fd*/
+
 char *init_el_file(char *f){
 
+  printf("Loading [%s]...",f);
   struct stat stat;
-  int fd = open(f,O_RDONLY,0);
+  fd = open(f,O_RDONLY,0);
   if( fd == -1 ){  
 
     fprintf(stderr,"bad edgelist file\n");
@@ -45,11 +32,15 @@ char *init_el_file(char *f){
   int sz = stat.st_size;
   num_edges = sz / (sizeof(vertex_t) * 2);
   fprintf(stderr,"Loading %d edges\n",num_edges);
+
   char *el = 
     mmap(NULL, sz, PROT_READ, MAP_PRIVATE /*| MAP_HUGETLB | MAP_HUGE_1GB*/, fd, 0);
+
   if( el == MAP_FAILED ){
     fprintf(stderr,"bad edgelist map attempt\n");
   }
+
+  printf("Done.\n");
   return el;
 
 }
@@ -68,17 +59,13 @@ void bin_init(char *el){
 
   }
 
-  printf("Bins\n----\n|");
   for(int i = 0 ; i < NUM_BINS; i ++){
-
-    printf("%d|",bin_sz[i]);
 
     /*An element of a bin contains a source key and an update value*/
     /*For now, these are both the size of a vertex_t*/
     bins[i] = (bin_elem_t *)malloc( bin_sz[i] * sizeof(bin_elem_t) );
 
   }
-  printf("\n");
 
 }
 
@@ -126,11 +113,151 @@ void dump_bins(){
 
 }
 
+
+
+/*auxData for use during neighpop*/
+unsigned long CSR_offset_array[MAX_VTX];
+
+/*auxData to serialize out at the end*/
+unsigned long CSR_offset_array_out[MAX_VTX];
+
+void CSR_count_neigh(){
+
+  printf("Counting neighbors...");
+
+  for(int i = 0; i < NUM_BINS; i++){
+
+    for(int j = 0; j < bin_sz[i]; j++){
+
+      (CSR_offset_array[bins[i][j].key])++; 
+
+    }
+
+  }
+
+  printf("Done.\n");
+
+}
+
+void CSR_cumul_neigh_count(){
+  
+  for(unsigned long i = 1; i < MAX_VTX; i++){
+
+    CSR_offset_array[i] += CSR_offset_array[i-1];
+
+  }
+  memcpy(CSR_offset_array_out, CSR_offset_array, MAX_VTX);
+
+}
+
+void CSR_print_neigh_counts(){
+  
+  printf("Neighbor Counts\n---------------\n");
+  for(unsigned long i = 0; i < MAX_VTX; i++){
+
+    if( CSR_offset_array[i] > 0 ){
+
+      printf("v%lu %lu\n",i,CSR_offset_array[i]);
+
+    }
+
+  } 
+
+}
+
+vertex_t *CSR_neigh_array;
+
+void CSR_alloc_neigh(){
+
+ 
+  CSR_neigh_array = malloc( num_edges * sizeof(vertex_t) );
+
+}
+
+void CSR_neigh_pop(){
+
+  printf("Populating neighbors...");
+  for(int i = 0; i < NUM_BINS; i++){
+
+    for(int j = 0; j < bin_sz[i]; j++){
+
+      CSR_neigh_array[ (CSR_offset_array[ bins[i][j].key ])++ ] = bins[i][j].val;
+
+    }
+
+  }
+  printf("Done.\n");
+
+}
+
+void CSR_out(char *out){
+  
+  printf ("Writing out CSR data to [%s]...",out);
+  unsigned long outsize = MAX_VTX * sizeof(unsigned long) + num_edges * sizeof(vertex_t) + 2* sizeof(unsigned long);
+  struct stat stat;
+ 
+  /*open file*/
+  int outfd = open(out,  O_CREAT | O_RDWR | O_TRUNC, (mode_t) 0x0777);
+  if( outfd == -1 ){  
+
+    fprintf(stderr,"Couldn't open CSR output file\n");
+    exit(-1); 
+
+  }
+
+  /*Seek to end and write dummy byte to make filesize large enough*/
+  if(lseek(outfd, outsize - 1, SEEK_SET) == -1){
+    fprintf(stderr,"csr seek error\n");
+    exit(-1);
+  }
+ 
+  if(write(outfd,"",1) == -1){
+    fprintf(stderr,"csr write error\n");
+    exit(-1);
+  }
+
+  /*Map big empty file into memory*/
+  char *csr = 
+    mmap(NULL, outsize, 
+          PROT_READ | PROT_WRITE | PROT_EXEC, MAP_SHARED, outfd, 0);
+
+  if( csr == MAP_FAILED ){
+    fprintf(stderr,"%s\n",strerror(errno));
+    fprintf(stderr,"Couldn't memory map CSR output file\n");
+    exit(-1);
+  }
+
+  unsigned long num_vtx = MAX_VTX;
+  memcpy(csr, &num_vtx, sizeof(unsigned long));
+  memcpy(csr + sizeof(unsigned long), &num_edges, sizeof(unsigned long));
+
+  /*Copy offsets from memory to file*/
+  memcpy(csr + 2*sizeof(unsigned long), CSR_offset_array_out, MAX_VTX * sizeof(unsigned long));
+
+  /*Copy neighs from memory to file*/
+  memcpy(csr + 2*sizeof(unsigned long) + MAX_VTX * sizeof(unsigned long), CSR_neigh_array, 
+         num_edges * sizeof(vertex_t));
+
+  
+  /*Sync to flush data*/
+  msync(csr, outsize, MS_SYNC);
+  /*unmap output file*/
+  munmap(csr, outsize);
+  /*close file*/
+  close(outfd);
+  printf("Done.\n");
+  
+}
+
 int main (int argc, char *argv[]){
 
   char *el = init_el_file(argv[1]);
   bin_init(el);
   bin(el);
-  dump_bins();
+  CSR_count_neigh();
+  CSR_cumul_neigh_count();
+  CSR_alloc_neigh();
+  CSR_neigh_pop();
+  CSR_out(argv[2]);
 
 }
