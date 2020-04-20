@@ -7,8 +7,9 @@
 #include <string.h>
 
 #define V_NAME_LEN 8
-#define NUM_BINS 256
+#define NUM_BINS 8
 
+#define v2bin(x) (x % NUM_BINS)
 int bin_sz[NUM_BINS];
 int num_edges;
 char *init_el_file(char *f){
@@ -23,9 +24,10 @@ char *init_el_file(char *f){
   }
 
   fstat(fd,&stat);
-  num_edges = stat.st_size;
+  int sz = stat.st_size;
+  num_edges = sz / V_NAME_LEN / 2;
   char *el = 
-    mmap(NULL, num_edges, PROT_READ, 
+    mmap(NULL, sz, PROT_READ, 
                              MAP_PRIVATE /*| MAP_HUGETLB | MAP_HUGE_1GB*/, fd, 0);
   if( el == MAP_FAILED ){
     fprintf(stderr,"bad edgelist map attempt\n");
@@ -35,23 +37,29 @@ char *init_el_file(char *f){
 }
 
 void bin_info(char *el){
-  char *cur = el;
-  char src[V_NAME_LEN+1];
-  char dst[V_NAME_LEN+1];
-  for(int i = 0; i < num_edges / (V_NAME_LEN * 2); i++){ 
 
-    memcpy(src,cur,V_NAME_LEN);
-    src[V_NAME_LEN] = '\0';
-    printf("%s\n",src);
-    cur+=V_NAME_LEN;
+  unsigned long *cur = (unsigned long *)el;
+  for(int i = 0; i < num_edges; i++){ 
 
-    memcpy(dst,cur,V_NAME_LEN);
-    dst[V_NAME_LEN] = '\0';
-    printf("%s\n",dst);
-    cur+=V_NAME_LEN;
+    unsigned long src = *cur;
+    bin_sz[ v2bin(src) ] ++;    
+    cur++;
 
-    printf("%16lu %16lu\n", *((unsigned long*)src), *((unsigned long*)dst));
+    unsigned long dst = *cur;
+    bin_sz[ v2bin(dst) ] ++;    
+    cur++;
+
+    //printf("%16lu %16lu\n", src, dst);
+
   }
+
+  printf("Bin Sizes:\n");
+  for(int i = 0 ; i < NUM_BINS; i ++){
+
+    printf("%d\n",bin_sz[i]);
+
+  }
+
 }
 
 int main (int argc, char *argv[]){
