@@ -1,6 +1,6 @@
-#define MAX_VTX 100000
+#define MAX_VTX 1000000
 #define V_NAME_LEN 8
-#define NUM_BINS 256
+#define NUM_BINS 256 
 
 #define v2bin(x) (x % NUM_BINS)
 #define e2bin(x,y) (x % NUM_BINS)

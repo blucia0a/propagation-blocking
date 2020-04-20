@@ -124,29 +124,38 @@ unsigned long CSR_offset_array_out[MAX_VTX];
 void CSR_count_neigh(){
 
   printf("Counting neighbors...");
-
+  unsigned long total_neighs = 0;
   for(int i = 0; i < NUM_BINS; i++){
 
     for(int j = 0; j < bin_sz[i]; j++){
 
-      (CSR_offset_array[bins[i][j].key])++; 
-
+      CSR_offset_array[ bins[i][j].key ]++; 
+      total_neighs++;
     }
 
   }
-
+  printf("Got %lu total neighbors\n",total_neighs);
   printf("Done.\n");
 
 }
 
-void CSR_cumul_neigh_count(){
-  
-  for(unsigned long i = 1; i < MAX_VTX; i++){
+/*
+cd: 3 2 1 2 3
+re: 0 3 5 6 8
 
-    CSR_offset_array[i] += CSR_offset_array[i-1];
+
+*/
+void CSR_cumul_neigh_count(){
+
+  unsigned long sum_so_far = 0; 
+  for(unsigned long i = 0; i < MAX_VTX; i++){
+
+    unsigned long tmp = CSR_offset_array[i];
+    CSR_offset_array[i] = sum_so_far;
+    sum_so_far += tmp;
 
   }
-  memcpy(CSR_offset_array_out, CSR_offset_array, MAX_VTX);
+  memcpy(CSR_offset_array_out, CSR_offset_array, MAX_VTX * sizeof(unsigned long));
 
 }
 
@@ -181,7 +190,11 @@ void CSR_neigh_pop(){
 
     for(int j = 0; j < bin_sz[i]; j++){
 
-      CSR_neigh_array[ (CSR_offset_array[ bins[i][j].key ])++ ] = bins[i][j].val;
+      vertex_t key = bins[i][j].key;
+      val_t val = bins[i][j].val;
+      unsigned long neigh_ind = CSR_offset_array[key];
+      CSR_neigh_array[ neigh_ind ] = val;
+      CSR_offset_array[key] = CSR_offset_array[key] + 1;
 
     }
 
