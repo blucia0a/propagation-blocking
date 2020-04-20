@@ -7,19 +7,28 @@
 #include <string.h>
 
 #define V_NAME_LEN 8
-#define NUM_BINS 8
+#define NUM_BINS 256
 
 #define v2bin(x) (x % NUM_BINS)
+#define e2bin(x,y) (x % NUM_BINS)
+#define e2key(x,y) (x)
+#define e2val(x,y) (y)
 
 typedef unsigned long vertex_t;
+typedef unsigned long val_t;
 typedef struct edge {
   vertex_t src;
   vertex_t dst;
 } edge_t;
 
+typedef struct bin_elem{
+  vertex_t key;
+  val_t val;
+} bin_elem_t;
+
 int num_edges;
 int bin_sz[NUM_BINS];
-vertex_t *bins[NUM_BINS];
+bin_elem_t *bins[NUM_BINS];
 
 char *init_el_file(char *f){
 
@@ -45,7 +54,7 @@ char *init_el_file(char *f){
 
 }
 
-void bin_info(char *el){
+void bin_init(char *el){
 
   vertex_t *cur = (vertex_t *)el;
   for(int i = 0; i < num_edges; i++){ 
@@ -57,24 +66,71 @@ void bin_info(char *el){
     vertex_t dst = *cur;
     cur++;
 
-    fprintf(stderr,"(%lu,%lu)\n",src,dst);
-
   }
 
-  printf("Bin Sizes:\n");
+  printf("Bins\n----\n|");
   for(int i = 0 ; i < NUM_BINS; i ++){
 
-    printf("%d\n",bin_sz[i]);
-    //bins[i] = malloc(sizeof(vertex_t)
+    printf("%d|",bin_sz[i]);
+
+    /*An element of a bin contains a source key and an update value*/
+    /*For now, these are both the size of a vertex_t*/
+    bins[i] = (bin_elem_t *)malloc( bin_sz[i] * sizeof(bin_elem_t) );
 
   }
+  printf("\n");
+
+}
+
+
+void bin(char *el){
+
+  printf("Binning...");
+  unsigned long bin_i[NUM_BINS];
+  memset( bin_i, 0, NUM_BINS * sizeof(unsigned long));
+
+  vertex_t *cur = (vertex_t *)el;
+  for(int i = 0; i < num_edges; i++){ 
+
+    vertex_t src = *cur;
+    cur++;  
+   
+    vertex_t dst = *cur;
+    cur++;  
+   
+    int ind = bin_i[ e2bin(src,dst) ]; 
+    (bin_i[ e2bin(src,dst) ])++;
+
+    bins[e2bin(src,dst)][ ind ].key = e2key(src,dst);
+    bins[e2bin(src,dst)][ ind ].val = e2val(src,dst);
+
+  }
+  printf("Done.\n");
+
+}
+
+void dump_bins(){
+
+  for(int i = 0; i < NUM_BINS; i++){
+
+    printf("Bin %d (%d edges)\n",i, bin_sz[i]);
+
+    
+    for(int j = 0; j < bin_sz[i]; j++){
+
+      printf("\t%lu %lu\n",bins[i][j].key,bins[i][j].val);
+
+    }
+
+  }   
 
 }
 
 int main (int argc, char *argv[]){
 
   char *el = init_el_file(argv[1]);
-  bin_info(el);
-  
+  bin_init(el);
+  bin(el);
+  dump_bins();
 
 }
