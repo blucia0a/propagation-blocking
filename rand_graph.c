@@ -10,7 +10,7 @@
 #include <errno.h>
 
 #define V_NAME_LEN 8
-#define NUM_BINS 256
+#define V_RANGE 100
 
 unsigned long num_edges;
 void write_rand_el_file(char *f){
@@ -45,9 +45,12 @@ void write_rand_el_file(char *f){
 
   printf ("Generating edge array...");
   unsigned long *edges = malloc(sizeof(unsigned long) * num_edges * 2);  
-  for(int i = 0; i < num_edges; i += 2){
-    edges[i] = rand(); 
-    edges[i+1] = rand();
+  for(int i = 0; i < num_edges * 2; i += 2){
+
+    edges[i] = rand() % V_RANGE; 
+    edges[i+1] = rand() % V_RANGE;
+
+    fprintf(stderr,"%lu %lu\n",edges[i],edges[i+1]);
   }
   printf ("Done.\n");
   printf ("Copying to file...");
@@ -77,3 +80,4 @@ int main (int argc, char *argv[]){
   write_rand_el_file(argv[1]);
 
 }
+
