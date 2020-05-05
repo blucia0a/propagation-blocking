@@ -86,75 +86,98 @@ void thd_bin_init(thd_binner_t *t){
 }
 
 
-//void bin(char *el){
-//
-//  printf("Binning...");
-//  unsigned long bin_i[NUM_BINS];
-//  memset( bin_i, 0, NUM_BINS * sizeof(unsigned long));
-//
-//  vertex_t *cur = (vertex_t *)el;
-//  for(int i = 0; i < num_edges; i++){ 
-//
-//    vertex_t src = *cur;
-//    cur++;  
-//   
-//    vertex_t dst = *cur;
-//    cur++;  
-//   
-//    int ind = bin_i[ e2bin(src,dst) ]; 
-//    (bin_i[ e2bin(src,dst) ])++;
-//
-//    bins[e2bin(src,dst)][ ind ].key = e2key(src,dst);
-//    bins[e2bin(src,dst)][ ind ].val = e2val(src,dst);
-//
-//  }
-//  printf("Done.\n");
-//
-//}
-//
-//void dump_bins(){
-//
-//  for(int i = 0; i < NUM_BINS; i++){
-//
-//    printf("Bin %d (%d edges)\n",i, bin_sz[i]);
-//
-//    
-//    for(int j = 0; j < bin_sz[i]; j++){
-//
-//      printf("\t%lu %lu\n",bins[i][j].key,bins[i][j].val);
-//
-//    }
-//
-//  }   
-//
-//}
-//
-//
-//
-///*auxData for use during neighpop*/
-//unsigned long CSR_offset_array[MAX_VTX];
-//
-///*auxData to serialize out at the end*/
-//unsigned long CSR_offset_array_out[MAX_VTX];
-//
-//void CSR_count_neigh(){
-//
-//  printf("Counting neighbors...");
-//  unsigned long total_neighs = 0;
-//  for(int i = 0; i < NUM_BINS; i++){
-//
-//    for(int j = 0; j < bin_sz[i]; j++){
-//
-//      CSR_offset_array[ bins[i][j].key ]++; 
-//      total_neighs++;
-//    }
-//
-//  }
-//  printf("Got %lu total neighbors\n",total_neighs);
-//  printf("Done.\n");
-//
-//}
-//
+void thd_bin(void *v_thd_binner_t){
+
+  thd_binner_t *t = (thd_binner_t*)v_thd_binner_t;
+  printf("Binning...");
+
+  /*
+    Local counters for the bin this thread is currently
+    processing
+  */
+  unsigned long bin_i[NUM_BINS];
+  memset( bin_i, 0, NUM_BINS * sizeof(unsigned long));
+
+  vertex_t *cur = (vertex_t *)t->el;
+  for(int i = 0; i < t->thd_edges; i++){ 
+
+    vertex_t src = *cur;
+    cur++;  
+   
+    vertex_t dst = *cur;
+    cur++;  
+   
+    int ind = bin_i[ e2bin(src,dst) ]; 
+    (bin_i[ e2bin(src,dst) ])++;
+
+    bins[t->tid][e2bin(src,dst)][ ind ].key = e2key(src,dst);
+    bins[t->tid][e2bin(src,dst)][ ind ].val = e2val(src,dst);
+
+  }
+  printf("Done.\n");
+
+}
+
+void thd_dump_bins(void *v_thd_binner_t){
+
+  thd_binner_t *t = (thd_binner_t*)v_thd_binner_t;
+  int tid = t->tid;
+  for(int i = 0; i < NUM_BINS; i++){
+
+    printf("Bin %d (%d edges)\n", i, bin_sz[tid][i]);
+
+    
+    for(int j = 0; j < bin_sz[tid][i]; j++){
+
+      printf("\t%lu %lu\n", bins[tid][i][j].key, bins[tid][i][j].val);
+
+    }
+
+  }   
+
+}
+
+/*auxData for use during neighpop*/
+unsigned long CSR_offset_array[NUM_THDS][MAX_VTX];
+
+/*auxData to serialize out at the end*/
+unsigned long CSR_offset_array_out[NUM_THDS][MAX_VTX];
+
+void thd_CSR_count_neigh(void *v_thd_binner_t){
+
+  thd_binner_t *t = (thd_binner_t*)v_thd_binner_t;
+  int tid = t->tid;
+
+  printf("Counting neighbors...");
+  unsigned long total_neighs = 0;
+  for(int i = 0; i < NUM_BINS; i++){
+
+    for(int j = 0; j < bin_sz[tid][i]; j++){
+
+      CSR_offset_array[tid][ bins[tid][i][j].key ]++; 
+      total_neighs++;
+
+    }
+
+  }
+  printf("[T%d] Got %lu total neighbors\n",tid,total_neighs);
+
+  /*
+  printf("[T%d]\n",tid);
+  for(int i = 0; i < NUM_BINS; i++){
+
+    printf("[B%d]{",i);
+    for(int j = 0; j < bin_sz[tid][i]; j++){
+      printf("%lu ",CSR_offset_array[tid][j]);
+    }
+    printf("}\n");
+
+  }
+  */
+  printf("Done.\n");
+
+}
+
 //void CSR_cumul_neigh_count(){
 //
 //  unsigned long sum_so_far = 0; 
@@ -276,8 +299,9 @@ void* thd_main (void *v_thd_binner_t){
 
   thd_binner_t *t = (thd_binner_t*)v_thd_binner_t;
   thd_bin_init(t);
-  //bin(el);
-  //CSR_count_neigh();
+  thd_bin(t);
+  //thd_dump_bins(t);
+  thd_CSR_count_neigh(t);
   //CSR_cumul_neigh_count();
   //CSR_alloc_neigh();
   //CSR_neigh_pop();
@@ -313,5 +337,7 @@ int main(int argc, char *argv[]){
   t->thd_edges = last_thd_edges;
   pthread_create(thds + NUM_THDS - 1,NULL,thd_main,(void*)t);
 
-
+  for(int i = 0; i < NUM_THDS; i++){
+    pthread_join(thds[i],NULL);
+  }
 }
