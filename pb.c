@@ -36,9 +36,9 @@ char *init_el_file(char *f){
   }
 
   fstat(fd,&stat);
-  int sz = stat.st_size;
+  size_t sz = stat.st_size;
   num_edges = sz / (sizeof(vertex_t) * 2);
-  fprintf(stderr,"Loading %d edges\n",num_edges);
+  fprintf(stderr,"Loading %lu edges\n",num_edges);
 
   char *el = 
     mmap(NULL, sz, PROT_READ, MAP_PRIVATE /*| MAP_HUGETLB | MAP_HUGE_1GB*/, fd, 0);
