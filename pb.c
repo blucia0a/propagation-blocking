@@ -89,7 +89,6 @@ void thd_bin_init(thd_binner_t *t){
 void thd_bin(void *v_thd_binner_t){
 
   thd_binner_t *t = (thd_binner_t*)v_thd_binner_t;
-  printf("Binning...");
 
   /*
     Local counters for the bin this thread is currently
@@ -114,7 +113,6 @@ void thd_bin(void *v_thd_binner_t){
     bins[t->tid][e2bin(src,dst)][ ind ].val = e2val(src,dst);
 
   }
-  printf("Done.\n");
 
 }
 
@@ -138,83 +136,82 @@ void thd_dump_bins(void *v_thd_binner_t){
 }
 
 /*auxData for use during neighpop*/
-unsigned long CSR_offset_array[NUM_THDS][MAX_VTX];
+unsigned long CSR_offset_array[MAX_VTX];
 
 /*auxData to serialize out at the end*/
-unsigned long CSR_offset_array_out[NUM_THDS][MAX_VTX];
+unsigned long CSR_offset_array_out[MAX_VTX];
 
-void thd_CSR_count_neigh(void *v_thd_binner_t){
-
-  thd_binner_t *t = (thd_binner_t*)v_thd_binner_t;
-  int tid = t->tid;
-
-  printf("Counting neighbors...");
-  unsigned long total_neighs = 0;
-  for(int i = 0; i < NUM_BINS; i++){
-
-    for(int j = 0; j < bin_sz[tid][i]; j++){
-
-      CSR_offset_array[tid][ bins[tid][i][j].key ]++; 
-      total_neighs++;
-
-    }
-
-  }
-  printf("[T%d] Got %lu total neighbors\n",tid,total_neighs);
+void thd_CSR_count_neigh(void *vtid){
 
   /*
-  printf("[T%d]\n",tid);
-  for(int i = 0; i < NUM_BINS; i++){
+    Bin Read Phase - Each thread processes a subset of bins to
+    have a disjoint set of elements in the offset_array
+  */
+  int tid = (int)vtid;
 
-    printf("[B%d]{",i);
-    for(int j = 0; j < bin_sz[tid][i]; j++){
-      printf("%lu ",CSR_offset_array[tid][j]);
+  /* This code assumes that NUM_BINS 
+     divides evenly by NUM_THDS */ 
+  int bins_per_thd = NUM_BINS / NUM_THDS;
+
+  unsigned long total_neighs = 0;
+  for(int h = 0; h < NUM_THDS; h++){
+
+    for(int i = bins_per_thd * tid; i < bins_per_thd * (tid + 1); i++){
+  
+      for(int j = 0; j < bin_sz[h][i]; j++){
+
+        /* Each thread is operating on bins with
+           disjoint keys.  The elements of CSR_offset_array
+           that each thread accesses will be disjoint
+           avoiding the need for synchronization */
+        unsigned long ind = bins[h][i][j].key; 
+        CSR_offset_array[ ind ]++; 
+        total_neighs++;
+
+      }
+
     }
-    printf("}\n");
 
   }
-  */
-  printf("Done.\n");
 
 }
 
-//void CSR_cumul_neigh_count(){
-//
-//  unsigned long sum_so_far = 0; 
-//  for(unsigned long i = 0; i < MAX_VTX; i++){
-//
-//    unsigned long tmp = CSR_offset_array[i];
-//    CSR_offset_array[i] = sum_so_far;
-//    sum_so_far += tmp;
-//
-//  }
-//  memcpy(CSR_offset_array_out, CSR_offset_array, MAX_VTX * sizeof(unsigned long));
-//
-//}
-//
-//void CSR_print_neigh_counts(){
-//  
-//  printf("Neighbor Counts\n---------------\n");
-//  for(unsigned long i = 0; i < MAX_VTX; i++){
-//
-//    if( CSR_offset_array[i] > 0 ){
-//
-//      printf("v%lu %lu\n",i,CSR_offset_array[i]);
-//
-//    }
-//
-//  } 
-//
-//}
-//
-//vertex_t *CSR_neigh_array;
-//
-//void CSR_alloc_neigh(){
-//
-// 
-//  CSR_neigh_array = malloc( num_edges * sizeof(vertex_t) );
-//
-//}
+void CSR_cumul_neigh_count(){
+
+  unsigned long sum_so_far = 0; 
+  for(unsigned long i = 0; i < MAX_VTX; i++){
+
+    unsigned long tmp = CSR_offset_array[i];
+    CSR_offset_array[i] = sum_so_far;
+    sum_so_far += tmp;
+
+  }
+  memcpy(CSR_offset_array_out, CSR_offset_array, MAX_VTX * sizeof(unsigned long));
+
+}
+
+void CSR_print_neigh_counts(){
+  
+  printf("Neighbor Counts\n---------------\n");
+  for(unsigned long i = 0; i < MAX_VTX; i++){
+
+    if( CSR_offset_array[i] > 0 ){
+
+      printf("v%lu %lu\n",i,CSR_offset_array[i]);
+
+    }
+
+  } 
+
+}
+
+
+vertex_t *CSR_neigh_array;
+
+void CSR_alloc_neigh(){
+  CSR_neigh_array = malloc( num_edges * sizeof(vertex_t) );
+}
+
 //
 //void CSR_neigh_pop(){
 //
@@ -295,11 +292,23 @@ void thd_CSR_count_neigh(void *v_thd_binner_t){
 //  
 //}
 
-void* thd_main (void *v_thd_binner_t){
+void* thd_main_bin (void *v_thd_binner_t){
 
   thd_binner_t *t = (thd_binner_t*)v_thd_binner_t;
   thd_bin_init(t);
   thd_bin(t);
+  //CSR_alloc_neigh();
+  //CSR_neigh_pop();
+  //CSR_out(argv[2]);
+  free(t);
+  return NULL;
+}
+
+void* thd_main_binread_count (void *v_thd_binner_t){
+
+  thd_binner_t *t = (thd_binner_t*)v_thd_binner_t;
+  //thd_bin_init(t);
+  //thd_bin(t);
   //thd_dump_bins(t);
   thd_CSR_count_neigh(t);
   //CSR_cumul_neigh_count();
@@ -316,6 +325,7 @@ int main(int argc, char *argv[]){
   unsigned long norm_thd_edges = num_edges / NUM_THDS;
   unsigned long last_thd_edges = num_edges % NUM_THDS;
 
+  printf("Binning...");
   for(int i = 0; i < NUM_THDS - 1; i++){
 
     thd_binner_t *t = (thd_binner_t*)malloc(sizeof(thd_binner_t));
@@ -325,7 +335,7 @@ int main(int argc, char *argv[]){
 
     /*release thd_edges[i] to worker thread here*/
  
-    pthread_create(thds + i,NULL,thd_main,(void*)t);
+    pthread_create(thds + i,NULL,thd_main_bin,(void*)t);
 
   } 
 
@@ -335,9 +345,34 @@ int main(int argc, char *argv[]){
   t->tid = NUM_THDS - 1;
   t->el = el + 2 * sizeof(vertex_t) * (NUM_THDS - 1);
   t->thd_edges = last_thd_edges;
-  pthread_create(thds + NUM_THDS - 1,NULL,thd_main,(void*)t);
+  pthread_create(thds + NUM_THDS - 1,NULL,thd_main_bin,(void*)t);
 
   for(int i = 0; i < NUM_THDS; i++){
     pthread_join(thds[i],NULL);
   }
+  printf("Done.\n");
+
+  /*Done with binning. Now bin read*/
+  
+  printf("Counting neighbors...");
+  for(int i = 0; i < NUM_THDS - 1; i++){
+
+    pthread_create(thds + i,NULL,thd_main_binread_count,(void*)i);
+
+  } 
+
+  /*The edges won't evenly divide by thread count, so the last
+    thread gets a little bit less work to do */
+  pthread_create(thds + NUM_THDS - 1,NULL,thd_main_binread_count,(void*)NUM_THDS-1);
+
+  for(int i = 0; i < NUM_THDS; i++){
+    pthread_join(thds[i],NULL);
+  }
+  printf("Done.\n");
+ 
+  /*Sequential accumulation round*/ 
+  printf("Accumulating neighbor counts...");
+  CSR_cumul_neigh_count();
+  printf("Done.\n");
+
 }
