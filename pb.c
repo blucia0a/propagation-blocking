@@ -141,14 +141,17 @@ unsigned long CSR_offset_array[MAX_VTX];
 /*auxData to serialize out at the end*/
 unsigned long CSR_offset_array_out[MAX_VTX];
 
-void thd_CSR_count_neigh(void *vtid){
+
+/*This is a binread implementation function.  It is currently
+written with poor modularity to avoid doing a function call
+in the inner loop of the bin reading traversal, in this case
+to increment the CSR offset array*/
+void thd_CSR_count_neigh(int tid){
 
   /*
     Bin Read Phase - Each thread processes a subset of bins to
     have a disjoint set of elements in the offset_array
   */
-  int tid = (int)((unsigned long)vtid);
-
   /* This code assumes that NUM_BINS 
      divides evenly by NUM_THDS */ 
   int bins_per_thd = NUM_BINS / NUM_THDS;
@@ -212,85 +215,95 @@ void CSR_alloc_neigh(){
   CSR_neigh_array = malloc( num_edges * sizeof(vertex_t) );
 }
 
-//
-//void CSR_neigh_pop(){
-//
-//  printf("Populating neighbors...");
-//  for(int i = 0; i < NUM_BINS; i++){
-//
-//    for(int j = 0; j < bin_sz[i]; j++){
-//
-//      vertex_t key = bins[i][j].key;
-//      val_t val = bins[i][j].val;
-//      unsigned long neigh_ind = CSR_offset_array[key];
-//      CSR_neigh_array[ neigh_ind ] = val;
-//      CSR_offset_array[key] = CSR_offset_array[key] + 1;
-//
-//    }
-//
-//  }
-//  printf("Done.\n");
-//
-//}
-//
-//void CSR_out(char *out){
-//  
-//  printf ("Writing out CSR data to [%s]...",out);
-//  unsigned long outsize = MAX_VTX * sizeof(unsigned long) + num_edges * sizeof(vertex_t) + 2* sizeof(unsigned long);
-//  struct stat stat;
-// 
-//  /*open file*/
-//  int outfd = open(out,  O_CREAT | O_RDWR | O_TRUNC, (mode_t) 0x0777);
-//  if( outfd == -1 ){  
-//
-//    fprintf(stderr,"Couldn't open CSR output file\n");
-//    exit(-1); 
-//
-//  }
-//
-//  /*Seek to end and write dummy byte to make filesize large enough*/
-//  if(lseek(outfd, outsize - 1, SEEK_SET) == -1){
-//    fprintf(stderr,"csr seek error\n");
-//    exit(-1);
-//  }
-// 
-//  if(write(outfd,"",1) == -1){
-//    fprintf(stderr,"csr write error\n");
-//    exit(-1);
-//  }
-//
-//  /*Map big empty file into memory*/
-//  char *csr = 
-//    mmap(NULL, outsize, 
-//          PROT_READ | PROT_WRITE | PROT_EXEC, MAP_SHARED, outfd, 0);
-//
-//  if( csr == MAP_FAILED ){
-//    fprintf(stderr,"%s\n",strerror(errno));
-//    fprintf(stderr,"Couldn't memory map CSR output file\n");
-//    exit(-1);
-//  }
-//
-//  unsigned long num_vtx = MAX_VTX;
-//  memcpy(csr, &num_vtx, sizeof(unsigned long));
-//  memcpy(csr + sizeof(unsigned long), &num_edges, sizeof(unsigned long));
-//
-//  /*Copy offsets from memory to file*/
-//  memcpy(csr + 2*sizeof(unsigned long), CSR_offset_array_out, MAX_VTX * sizeof(unsigned long));
-//
-//  /*Copy neighs from memory to file*/
-//  memcpy(csr + 2*sizeof(unsigned long) + MAX_VTX * sizeof(unsigned long), CSR_neigh_array, 
-//         num_edges * sizeof(vertex_t));
-//
-//  
-//  /*Sync to flush data*/
-//  msync(csr, outsize, MS_SYNC);
-//  /*unmap output file*/
-//  munmap(csr, outsize);
-//  /*close file*/
-//  close(outfd);
-//  printf("Done.\n");
-//  
-//}
+
+/*This is another binread function, like the one that
+  counts adjacencies above.  This is "inlined" like the other
+  one at a cost in modularity, but at a benefit in performance,
+  avoiding any abstraction/modularity overheads in the inner loop
+*/
+void thd_CSR_neigh_pop(int tid){
+
+  int bins_per_thd = NUM_BINS / NUM_THDS;
+
+  unsigned long total_neighs = 0;
+  for(int h = 0; h < NUM_THDS; h++){
+
+    for(int i = bins_per_thd * tid; i < bins_per_thd * (tid + 1); i++){
+  
+      for(int j = 0; j < bin_sz[h][i]; j++){
+
+        vertex_t key = bins[h][i][j].key;
+        val_t val = bins[h][i][j].val;
+
+        unsigned long neigh_ind = CSR_offset_array[key];
+        CSR_neigh_array[ neigh_ind ] = val;
+        CSR_offset_array[key] = CSR_offset_array[key] + 1;
+      }
+ 
+    }
+
+  }
+
+}
+
+void CSR_out(char *out){
+  
+  printf ("Writing out CSR data to [%s]...",out);
+  unsigned long outsize = MAX_VTX * sizeof(unsigned long) + num_edges * sizeof(vertex_t) + 2* sizeof(unsigned long);
+  struct stat stat;
+ 
+  /*open file*/
+  int outfd = open(out,  O_CREAT | O_RDWR | O_TRUNC, (mode_t) 0x0777);
+  if( outfd == -1 ){  
+
+    fprintf(stderr,"Couldn't open CSR output file\n");
+    exit(-1); 
+
+  }
+
+  /*Seek to end and write dummy byte to make filesize large enough*/
+  if(lseek(outfd, outsize - 1, SEEK_SET) == -1){
+    fprintf(stderr,"csr seek error\n");
+    exit(-1);
+  }
+ 
+  if(write(outfd,"",1) == -1){
+    fprintf(stderr,"csr write error\n");
+    exit(-1);
+  }
+
+  /*Map big empty file into memory*/
+  char *csr = 
+    mmap(NULL, outsize, 
+          PROT_READ | PROT_WRITE | PROT_EXEC, MAP_SHARED, outfd, 0);
+
+  if( csr == MAP_FAILED ){
+    fprintf(stderr,"%s\n",strerror(errno));
+    fprintf(stderr,"Couldn't memory map CSR output file\n");
+    exit(-1);
+  }
+
+  unsigned long num_vtx = MAX_VTX;
+  memcpy(csr, &num_vtx, sizeof(unsigned long));
+  memcpy(csr + sizeof(unsigned long), &num_edges, sizeof(unsigned long));
+
+  /*Copy offsets from memory to file*/
+  memcpy(csr + 2*sizeof(unsigned long), CSR_offset_array_out, MAX_VTX * sizeof(unsigned long));
+
+  /*Copy neighs from memory to file*/
+  memcpy(csr + 2*sizeof(unsigned long) + MAX_VTX * sizeof(unsigned long), CSR_neigh_array, 
+         num_edges * sizeof(vertex_t));
+
+  
+  /*Sync to flush data*/
+  msync(csr, outsize, MS_SYNC);
+  /*unmap output file*/
+  munmap(csr, outsize);
+  /*close file*/
+  close(outfd);
+  printf("Done.\n");
+  
+}
 
 void* thd_main_bin (void *v_thd_binner_t){
 
@@ -304,17 +317,15 @@ void* thd_main_bin (void *v_thd_binner_t){
   return NULL;
 }
 
-void* thd_main_binread_count (void *v_thd_binner_t){
+void* thd_main_binread_count (void *vtid){
 
-  thd_binner_t *t = (thd_binner_t*)v_thd_binner_t;
-  //thd_bin_init(t);
-  //thd_bin(t);
-  //thd_dump_bins(t);
-  thd_CSR_count_neigh(t);
-  //CSR_cumul_neigh_count();
-  //CSR_alloc_neigh();
-  //CSR_neigh_pop();
-  //CSR_out(argv[2]);
+  thd_CSR_count_neigh((int)(unsigned long)vtid);
+  return NULL;
+}
+
+void* thd_main_binread_npop (void *vtid){
+
+  thd_CSR_neigh_pop((int)(unsigned long)vtid);
   return NULL;
 }
 
@@ -374,5 +385,30 @@ int main(int argc, char *argv[]){
   printf("Accumulating neighbor counts...");
   CSR_cumul_neigh_count();
   printf("Done.\n");
+  
+  CSR_alloc_neigh();
+ 
 
+ 
+  /*Done with bin read for neighbor count.  Now bin read for neighbor pop*/
+  printf("Populating neighbors...");
+  for(int i = 0; i < NUM_THDS - 1; i++){
+
+    pthread_create(thds + i,NULL,thd_main_binread_npop,(void*)(unsigned long)i);
+
+  } 
+
+  /*The edges won't evenly divide by thread count, so the last
+    thread gets a little bit less work to do */
+  pthread_create(thds + NUM_THDS - 1,NULL,thd_main_binread_npop,(void*)NUM_THDS-1);
+
+  for(int i = 0; i < NUM_THDS; i++){
+    pthread_join(thds[i],NULL);
+  }
+  printf("Done.\n");
+  
+  printf("Ejecting CSR...");
+  CSR_out(argv[2]);
+  printf("Done.\n");
+ 
 }
