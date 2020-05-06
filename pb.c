@@ -12,9 +12,9 @@
 #include "pb.h"
 
 /*Total number of edges in the graph*/
-int num_edges;
+unsigned long num_edges;
 /*Number of edges that a thread works on */
-int thd_edges[NUM_THDS];
+unsigned long thd_edges[NUM_THDS];
 
 pthread_t thds[NUM_THDS];
 
@@ -147,7 +147,7 @@ void thd_CSR_count_neigh(void *vtid){
     Bin Read Phase - Each thread processes a subset of bins to
     have a disjoint set of elements in the offset_array
   */
-  int tid = (int)vtid;
+  int tid = (int)((unsigned long)vtid);
 
   /* This code assumes that NUM_BINS 
      divides evenly by NUM_THDS */ 
@@ -357,7 +357,7 @@ int main(int argc, char *argv[]){
   printf("Counting neighbors...");
   for(int i = 0; i < NUM_THDS - 1; i++){
 
-    pthread_create(thds + i,NULL,thd_main_binread_count,(void*)i);
+    pthread_create(thds + i,NULL,thd_main_binread_count,(void*)(unsigned long)i);
 
   } 
 
