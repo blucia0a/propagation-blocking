@@ -32,10 +32,11 @@ typedef struct bin_ctx {
 } bin_ctx_t;
 
 typedef struct thd_binner {
+
   int tid;
   unsigned long thd_edges;
   char *el;
-  bin_ctx_t *ctx;
+
 } thd_binner_t;
 
 
