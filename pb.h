@@ -24,8 +24,10 @@ typedef struct bin_elem{
 
 typedef struct bin_ctx {
 
-  int *bin_sz[NUM_THDS][NUM_BINS];
-  bin_elem_t *bins[NUM_THDS][NUM_BINS];
+  int (*bin_sz)[NUM_THDS][NUM_BINS];
+  bin_elem_t *(*bins)[NUM_THDS][NUM_BINS];
+  int num_edges;
+  int tid;
 
 } bin_ctx_t;
 

@@ -10,6 +10,8 @@
 #include <pthread.h>
 
 #include "pb.h"
+#include "csr.h"
+#include "futil.h"
 
 /*Total number of edges in the graph*/
 unsigned long num_edges;
@@ -120,19 +122,19 @@ void* thd_main_bin (void *v_thd_binner_t){
 
 void* thd_main_binread_count (void *vtid){
 
-  thd_CSR_count_neigh((int)(unsigned long)vtid);
+  thd_CSR_count_neigh(vtid);
   return NULL;
 }
 
 void* thd_main_binread_npop (void *vtid){
 
-  thd_CSR_neigh_pop((int)(unsigned long)vtid);
+  thd_CSR_neigh_pop(vtid);
   return NULL;
 }
 
 int main(int argc, char *argv[]){
 
-  char *el = init_el_file(argv[1]);
+  char *el = init_el_file(argv[1],&num_edges);
 
   unsigned long norm_thd_edges = num_edges / NUM_THDS;
   unsigned long last_thd_edges = num_edges % NUM_THDS;
@@ -164,56 +166,57 @@ int main(int argc, char *argv[]){
   }
   printf("Done.\n");
 
-  bin_ctx_t *ctx = (bin_ctx_t *)malloc(sizeof(bin_ctx_t)); 
-  ctx->bin_sz = &bin_sz;
-  ctx->bins = bins;
   /*Done with binning. Now bin read*/
- 
-  /*TODO: pass context into pthread create to pass into binread funcs*/ 
-  printf("Counting neighbors...");
-  for(int i = 0; i < NUM_THDS - 1; i++){
 
-    pthread_create(thds + i,NULL,thd_main_binread_count,(void*)(unsigned long)i);
+  bin_ctx_t *ctxs[NUM_THDS];
+  for(int i = 0; i < NUM_THDS; i++){
+
+    bin_ctx_t *ctx = (bin_ctx_t *)malloc(sizeof(bin_ctx_t)); 
+    ctx->bin_sz = &bin_sz;
+    ctx->bins = &bins;
+    ctx->num_edges = num_edges;
+    ctx->tid = i;
+    ctxs[i] = ctx;
+
+  }
+
+
+  printf("Counting neighbors...");
+  for(int i = 0; i < NUM_THDS; i++){
+
+    pthread_create(thds + i,NULL,thd_main_binread_count,(void*)ctxs[i]);
 
   } 
-
-  /*The edges won't evenly divide by thread count, so the last
-    thread gets a little bit less work to do */
-  pthread_create(thds + NUM_THDS - 1,NULL,thd_main_binread_count,(void*)NUM_THDS-1);
 
   for(int i = 0; i < NUM_THDS; i++){
     pthread_join(thds[i],NULL);
   }
   printf("Done.\n");
+
+
  
   /*Sequential accumulation round*/ 
   printf("Accumulating neighbor counts...");
   CSR_cumul_neigh_count();
   printf("Done.\n");
-  
-  CSR_alloc_neigh();
- 
+  CSR_alloc_neigh(num_edges);
 
  
   /*Done with bin read for neighbor count.  Now bin read for neighbor pop*/
   printf("Populating neighbors...");
-  for(int i = 0; i < NUM_THDS - 1; i++){
-
-    pthread_create(thds + i,NULL,thd_main_binread_npop,(void*)(unsigned long)i);
-
+  for(int i = 0; i < NUM_THDS; i++){
+    pthread_create(thds + i,NULL,thd_main_binread_npop,(void*)ctxs[i]);
   } 
-
-  /*The edges won't evenly divide by thread count, so the last
-    thread gets a little bit less work to do */
-  pthread_create(thds + NUM_THDS - 1,NULL,thd_main_binread_npop,(void*)NUM_THDS-1);
 
   for(int i = 0; i < NUM_THDS; i++){
     pthread_join(thds[i],NULL);
+    free(ctxs[i]);
   }
   printf("Done.\n");
-  
+ 
+ 
   printf("Ejecting CSR...");
-  CSR_out(argv[2]);
+  CSR_out(argv[2],num_edges);
   printf("Done.\n");
  
 }

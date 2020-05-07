@@ -17,17 +17,19 @@ unsigned long CSR_offset_array[MAX_VTX];
 /*auxData to serialize out at the end*/
 unsigned long CSR_offset_array_out[MAX_VTX];
 
-
 /*This is a binread implementation function.  It is currently
 written with poor modularity to avoid doing a function call
 in the inner loop of the bin reading traversal, in this case
 to increment the CSR offset array*/
-void thd_CSR_count_neigh(int tid, bin_ctx_t *ctx){
+void thd_CSR_count_neigh(void *vctx){
 
   /*
     Bin Read Phase - Each thread processes a subset of bins to
     have a disjoint set of elements in the offset_array
   */
+  bin_ctx_t *ctx = (bin_ctx_t*)vctx;
+  int tid = ctx->tid;
+
   /* This code assumes that NUM_BINS 
      divides evenly by NUM_THDS */ 
   int bins_per_thd = NUM_BINS / NUM_THDS;
@@ -36,14 +38,14 @@ void thd_CSR_count_neigh(int tid, bin_ctx_t *ctx){
   for(int h = 0; h < NUM_THDS; h++){
 
     for(int i = bins_per_thd * tid; i < bins_per_thd * (tid + 1); i++){
-  
+      
       for(int j = 0; j < (*ctx->bin_sz)[h][i]; j++){
 
-        /* Each thread is operating on bins with
-           disjoint keys.  The elements of CSR_offset_array
-           that each thread accesses will be disjoint
-           avoiding the need for synchronization */
-        unsigned long ind = ctx->bins[h][i][j].key; 
+         /* Each thread is operating on bins with
+            disjoint keys.  The elements of CSR_offset_array
+            that each thread accesses will be disjoint
+            avoiding the need for synchronization */
+        unsigned long ind = (*ctx->bins)[h][i][j].key;  
         CSR_offset_array[ ind ]++; 
         total_neighs++;
 
@@ -86,9 +88,8 @@ void CSR_print_neigh_counts(){
 
 
 vertex_t *CSR_neigh_array;
-
-void CSR_alloc_neigh(){
-  CSR_neigh_array = malloc( num_edges * sizeof(vertex_t) );
+void CSR_alloc_neigh(unsigned long alloc_num_edges){
+  CSR_neigh_array = malloc( alloc_num_edges * sizeof(vertex_t) );
 }
 
 
@@ -97,8 +98,10 @@ void CSR_alloc_neigh(){
   one at a cost in modularity, but at a benefit in performance,
   avoiding any abstraction/modularity overheads in the inner loop
 */
-void thd_CSR_neigh_pop(int tid){
+void thd_CSR_neigh_pop(void *vctx){
 
+  bin_ctx_t *ctx = (bin_ctx_t*)vctx;
+  int tid = ctx->tid;
   int bins_per_thd = NUM_BINS / NUM_THDS;
 
   unsigned long total_neighs = 0;
@@ -108,8 +111,8 @@ void thd_CSR_neigh_pop(int tid){
   
       for(int j = 0; j < (*ctx->bin_sz)[h][i]; j++){
 
-        vertex_t key = ctx->bins[h][i][j].key;
-        val_t val = ctx->bins[h][i][j].val;
+        vertex_t key = (*ctx->bins)[h][i][j].key;
+        val_t val = (*ctx->bins)[h][i][j].val;
 
         unsigned long neigh_ind = CSR_offset_array[key];
         CSR_neigh_array[ neigh_ind ] = val;
@@ -122,8 +125,8 @@ void thd_CSR_neigh_pop(int tid){
 
 }
 
-void CSR_out(char *out){
-  
+void CSR_out(char *out, unsigned long num_edges){
+ 
   printf ("Writing out CSR data to [%s]...",out);
   unsigned long outsize = MAX_VTX * sizeof(unsigned long) + num_edges * sizeof(vertex_t) + 2* sizeof(unsigned long);
   struct stat stat;
