@@ -11,13 +11,33 @@
 
 #include "pb.h"
 #include "csr.h"
+#include "graph.h"
+
+csr_t *CSR_alloc(){
+  csr_t *csr = (csr_t*)malloc(sizeof(csr_t));
+  return csr;
+}
+
+csr_offset_t *CSR_alloc_offset_array(unsigned long size){
+
+  csr_offset_t *oa = (csr_offset_t*)malloc(sizeof(csr_offset_t) * size);
+  return oa;
+
+}
+
+csr_offset_t *CSR_alloc_neigh_array(unsigned long size){
+
+  csr_vertex_t *na = (csr_vertex_t*)malloc(sizeof(csr_vertex_t) * size);
+  return na;
+
+}
 
 
 /*This is a binread implementation function.  It is currently
 written with poor modularity to avoid doing a function call
 in the inner loop of the bin reading traversal, in this case
 to increment the CSR offset array*/
-void thd_CSR_count_neigh(void *vctx){
+void CSR_count_neigh(void *vctx){
 
   /*
     Bin Read Phase - Each thread processes a subset of bins to
@@ -29,7 +49,7 @@ void thd_CSR_count_neigh(void *vctx){
   /* This code assumes that NUM_BINS 
      divides evenly by NUM_THDS */ 
   int bins_per_thd = NUM_BINS / NUM_THDS;
-
+  csr_offset_t *CSR_offset_array = (csr_offset_t *)ctx->data;
   unsigned long total_neighs = 0;
   for(int h = 0; h < NUM_THDS; h++){
 
@@ -42,7 +62,7 @@ void thd_CSR_count_neigh(void *vctx){
             that each thread accesses will be disjoint
             avoiding the need for synchronization */
         unsigned long ind = (ctx->bins)[h][i][j].key;  
-        CSR_offset_array[ ind ]++; 
+        CSR_offset_array[ind]++; 
         total_neighs++;
 
       }
@@ -53,7 +73,7 @@ void thd_CSR_count_neigh(void *vctx){
 
 }
 
-void CSR_cumul_neigh_count(){
+void CSR_cumul_neigh_count(csr_offset_t *CSR_offset_array, csr_offset_t *CSR_offset_array_out){
 
   unsigned long sum_so_far = 0; 
   for(unsigned long i = 0; i < MAX_VTX; i++){
@@ -63,11 +83,12 @@ void CSR_cumul_neigh_count(){
     sum_so_far += tmp;
 
   }
+  
   memcpy(CSR_offset_array_out, CSR_offset_array, MAX_VTX * sizeof(unsigned long));
 
 }
 
-void CSR_print_neigh_counts(){
+void CSR_print_neigh_counts(csr_offset_t *CSR_offset_array){
   
   printf("Neighbor Counts\n---------------\n");
   for(unsigned long i = 0; i < MAX_VTX; i++){
@@ -83,19 +104,18 @@ void CSR_print_neigh_counts(){
 }
 
 
-void CSR_alloc_neigh(unsigned long alloc_num_edges){
-  CSR_neigh_array = malloc( alloc_num_edges * sizeof(vertex_t) );
-}
-
-
 /*This is another binread function, like the one that
   counts adjacencies above.  This is "inlined" like the other
   one at a cost in modularity, but at a benefit in performance,
   avoiding any abstraction/modularity overheads in the inner loop
 */
-void thd_CSR_neigh_pop(void *vctx){
+void CSR_neigh_pop(void *vctx){
 
   bin_ctx_t *ctx = (bin_ctx_t*)vctx;
+  csr_t *csr = (csr_t *)ctx->data;
+  csr_offset_t *CSR_offset_array = csr->oa;
+  csr_vertex_t *CSR_neigh_array = csr->na;
+
   int tid = ctx->tid;
   int bins_per_thd = NUM_BINS / NUM_THDS;
 
@@ -120,9 +140,13 @@ void thd_CSR_neigh_pop(void *vctx){
 
 }
 
-void CSR_out(char *out, unsigned long num_edges){
+void CSR_out(char *out, unsigned long num_edges, csr_t *csr_data){
  
   printf ("Writing out CSR data to [%s]...",out);
+
+  csr_offset_t *CSR_offset_array_out = csr_data->oa;
+  csr_vertex_t *CSR_neigh_array = csr_data->na;
+
   unsigned long outsize = MAX_VTX * sizeof(unsigned long) + num_edges * sizeof(vertex_t) + 2* sizeof(unsigned long);
   struct stat stat;
  

@@ -1,7 +1,9 @@
 #ifndef _PB_H_
 #define _PB_H_
-#define MAX_VTX 1000000
-#define V_NAME_LEN 8
+
+#include "graph.h"
+#include "el.h"
+
 #define NUM_BINS 256 
 #define NUM_THDS 8
 
@@ -9,17 +11,6 @@
 #define e2bin(x,y) (x % NUM_BINS)
 #define e2key(x,y) (x)
 #define e2val(x,y) (y)
-
-#include "el.h"
-
-typedef unsigned long vertex_t;
-typedef unsigned long val_t;
-typedef struct edge {
-
-  vertex_t src;
-  vertex_t dst;
-
-} edge_t;
 
 typedef struct bin_elem{
 
@@ -34,6 +25,7 @@ typedef struct bin_ctx {
   bin_elem_t ***bins; /*2d array of bins for NUM_THDS * NUM_BINS*/
   int num_edges;
   int tid;
+  void *data; /*polymorphic field for app-specific data used in binread*/
 
 } bin_ctx_t;
 

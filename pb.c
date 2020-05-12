@@ -11,6 +11,8 @@
 
 #include "pb.h"
 #include "csr.h"
+#include "graph.h"
+#include "el.h"
 
 /*Total number of edges in the graph*/
 unsigned long num_edges;
@@ -117,13 +119,13 @@ void* thd_main_bin (void *v_thd_binner_t){
 
 void* thd_main_binread_count (void *vtid){
 
-  thd_CSR_count_neigh(vtid);
+  CSR_count_neigh(vtid);
   return NULL;
 }
 
 void* thd_main_binread_npop (void *vtid){
 
-  thd_CSR_neigh_pop(vtid);
+  CSR_neigh_pop(vtid);
   return NULL;
 }
 
@@ -180,7 +182,67 @@ bin_ctx_t *par_bin(el_t *el){
 
 }
 
-void par_binread_count(el_t *el){
+csr_offset_t *par_binread_count(bin_ctx_t *g_ctx){
+ 
+  csr_offset_t *g_oa = CSR_alloc_offset_array(MAX_VTX);
+
+  bin_ctx_t *ctxs[NUM_THDS];
+  for(int i = 0; i < NUM_THDS; i++){
+
+    bin_ctx_t *ctx = (bin_ctx_t *)malloc(sizeof(bin_ctx_t)); 
+    ctx->bin_sz = g_ctx->bin_sz;
+    ctx->bins = g_ctx->bins;
+    ctx->num_edges = g_ctx->num_edges;
+    ctx->tid = i;
+    ctx->data = (void*)g_oa;
+    ctxs[i] = ctx;
+    
+
+  }
+
+
+  for(int i = 0; i < NUM_THDS; i++){
+
+    pthread_create(thds + i,NULL,thd_main_binread_count,(void*)ctxs[i]);
+
+  } 
+
+  for(int i = 0; i < NUM_THDS; i++){
+    pthread_join(thds[i],NULL);
+    free(ctxs[i]);
+  }
+  return g_oa;
+
+}
+
+void par_binread_npop(bin_ctx_t *g_ctx){
+ 
+  csr_t *csr = (csr_t *)g_ctx->data;
+  bin_ctx_t *ctxs[NUM_THDS];
+  for(int i = 0; i < NUM_THDS; i++){
+
+    bin_ctx_t *ctx = (bin_ctx_t *)malloc(sizeof(bin_ctx_t)); 
+    ctx->bin_sz = g_ctx->bin_sz;
+    ctx->bins = g_ctx->bins;
+    ctx->num_edges = g_ctx->num_edges;
+    ctx->tid = i;
+    ctx->data = (void*)csr;
+    ctxs[i] = ctx;
+    
+
+  }
+
+
+  for(int i = 0; i < NUM_THDS; i++){
+
+    pthread_create(thds + i,NULL,thd_main_binread_npop,(void*)ctxs[i]);
+
+  } 
+
+  for(int i = 0; i < NUM_THDS; i++){
+    pthread_join(thds[i],NULL);
+    free(ctxs[i]);
+  }
 
 }
 
@@ -194,56 +256,35 @@ int main(int argc, char *argv[]){
   printf("Done.\n");
 
   /*Done with binning. Now bin read*/
-
-  bin_ctx_t *ctxs[NUM_THDS];
-  for(int i = 0; i < NUM_THDS; i++){
-
-    bin_ctx_t *ctx = (bin_ctx_t *)malloc(sizeof(bin_ctx_t)); 
-    ctx->bin_sz = g_ctx->bin_sz;
-    ctx->bins = g_ctx->bins;
-    ctx->num_edges = el->num_edges;
-    ctx->tid = i;
-    ctxs[i] = ctx;
-
-  }
-
-
+  
   printf("Counting neighbors...");
-  for(int i = 0; i < NUM_THDS; i++){
-
-    pthread_create(thds + i,NULL,thd_main_binread_count,(void*)ctxs[i]);
-
-  } 
-
-  for(int i = 0; i < NUM_THDS; i++){
-    pthread_join(thds[i],NULL);
-  }
+  csr_offset_t *oa = par_binread_count(g_ctx);
   printf("Done.\n");
-
-
  
+
   /*Sequential accumulation round*/ 
   printf("Accumulating neighbor counts...");
-  CSR_cumul_neigh_count();
+  csr_t *csr = CSR_alloc();
+  csr->oa = oa;
+  csr_offset_t *oa_out = CSR_alloc_offset_array(MAX_VTX);
+  CSR_cumul_neigh_count(csr->oa, oa_out);
   printf("Done.\n");
-  CSR_alloc_neigh(el->num_edges);
+
 
  
   /*Done with bin read for neighbor count.  Now bin read for neighbor pop*/
-  printf("Populating neighbors...");
-  for(int i = 0; i < NUM_THDS; i++){
-    pthread_create(thds + i,NULL,thd_main_binread_npop,(void*)ctxs[i]);
-  } 
 
-  for(int i = 0; i < NUM_THDS; i++){
-    pthread_join(thds[i],NULL);
-    free(ctxs[i]);
-  }
+
+  csr->na = CSR_alloc_neigh_array(el->num_edges);
+  printf("Populating neighbors...");
+  g_ctx->data = (void*)csr;
+  par_binread_npop(g_ctx);
   printf("Done.\n");
  
  
   printf("Ejecting CSR...");
-  CSR_out(argv[2],el->num_edges);
+  csr->oa = oa_out;
+  CSR_out(argv[2],el->num_edges,csr);
   printf("Done.\n");
  
 }
