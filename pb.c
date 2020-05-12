@@ -182,9 +182,12 @@ bin_ctx_t *par_bin(el_t *el){
 
 }
 
-csr_offset_t *par_binread_count(bin_ctx_t *g_ctx){
+void par_binread_count(bin_ctx_t *g_ctx){
  
   csr_offset_t *g_oa = CSR_alloc_offset_array(MAX_VTX);
+
+  /*This is effectively the return value, via g_ctx*/
+  g_ctx->data = (void*)g_oa;
 
   bin_ctx_t *ctxs[NUM_THDS];
   for(int i = 0; i < NUM_THDS; i++){
@@ -211,7 +214,6 @@ csr_offset_t *par_binread_count(bin_ctx_t *g_ctx){
     pthread_join(thds[i],NULL);
     free(ctxs[i]);
   }
-  return g_oa;
 
 }
 
@@ -246,6 +248,12 @@ void par_binread_npop(bin_ctx_t *g_ctx){
 
 }
 
+/*TODO: factor par_binread_{count | npop} into a generic binread that takes a
+ * bin_ctx_t * and a function pointer to a function that works on a bin_ctx_t *
+ * 
+ * THen, move main to main.c and move all mention of CSR to csr.c or main.c
+ * pb.c/.h is purely about EL and bins
+ * */
 int main(int argc, char *argv[]){
 
   el_t *el = init_el_file(argv[1]);
@@ -258,24 +266,26 @@ int main(int argc, char *argv[]){
   /*Done with binning. Now bin read*/
   
   printf("Counting neighbors...");
-  csr_offset_t *oa = par_binread_count(g_ctx);
+  par_binread_count(g_ctx);
   printf("Done.\n");
- 
+
+  csr_offset_t *oa = (csr_offset_t *)g_ctx->data;
 
   /*Sequential accumulation round*/ 
   printf("Accumulating neighbor counts...");
   csr_t *csr = CSR_alloc();
+
+  csr->na = CSR_alloc_neigh_array(el->num_edges);
   csr->oa = oa;
+
+  /*Need a spare one of these for output later*/
   csr_offset_t *oa_out = CSR_alloc_offset_array(MAX_VTX);
+
   CSR_cumul_neigh_count(csr->oa, oa_out);
   printf("Done.\n");
 
-
- 
   /*Done with bin read for neighbor count.  Now bin read for neighbor pop*/
 
-
-  csr->na = CSR_alloc_neigh_array(el->num_edges);
   printf("Populating neighbors...");
   g_ctx->data = (void*)csr;
   par_binread_npop(g_ctx);
