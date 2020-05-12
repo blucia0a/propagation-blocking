@@ -113,10 +113,6 @@ void* thd_main_bin (void *v_thd_binner_t){
   thd_binner_t *t = (thd_binner_t*)v_thd_binner_t;
   thd_bin_init(t);
   thd_bin(t);
-  //CSR_alloc_neigh();
-  //CSR_neigh_pop();
-  //CSR_out(argv[2]);
-  free(t);
   return NULL;
 }
 
@@ -134,18 +130,21 @@ void* thd_main_binread_npop (void *vtid){
 
 int main(int argc, char *argv[]){
 
-  char *el = init_el_file(argv[1],&num_edges);
+  el_t *el = init_el_file(argv[1]);
 
-  unsigned long norm_thd_edges = num_edges / NUM_THDS;
-  unsigned long last_thd_edges = num_edges % NUM_THDS;
+  unsigned long norm_thd_edges = el->num_edges / NUM_THDS;
+  unsigned long last_thd_edges = el->num_edges % NUM_THDS;
 
+  thd_binner_t *binners[NUM_THDS];
   printf("Binning...");
   for(int i = 0; i < NUM_THDS - 1; i++){
 
     thd_binner_t *t = (thd_binner_t*)malloc(sizeof(thd_binner_t));
     t->tid = i;
-    t->el = el + 2 * sizeof(vertex_t) * i;
+    t->el_ptr = el->el + 2 * sizeof(vertex_t) * i;
     t->thd_edges = norm_thd_edges;
+    t->el = el;
+    binners[i] = t;
 
     /*release thd_edges[i] to worker thread here*/
  
@@ -157,12 +156,15 @@ int main(int argc, char *argv[]){
     thread gets a little bit less work to do */
   thd_binner_t *t = (thd_binner_t*)malloc(sizeof(thd_binner_t));
   t->tid = NUM_THDS - 1;
-  t->el = el + 2 * sizeof(vertex_t) * (NUM_THDS - 1);
+  t->el = el;
+  t->el_ptr = el->el + 2 * sizeof(vertex_t) * (NUM_THDS - 1);
   t->thd_edges = last_thd_edges;
+  binners[NUM_THDS - 1] = t;
   pthread_create(thds + NUM_THDS - 1,NULL,thd_main_bin,(void*)t);
 
   for(int i = 0; i < NUM_THDS; i++){
     pthread_join(thds[i],NULL);
+    free(binners[i]);
   }
   printf("Done.\n");
 
@@ -174,7 +176,7 @@ int main(int argc, char *argv[]){
     bin_ctx_t *ctx = (bin_ctx_t *)malloc(sizeof(bin_ctx_t)); 
     ctx->bin_sz = &bin_sz;
     ctx->bins = &bins;
-    ctx->num_edges = num_edges;
+    ctx->num_edges = el->num_edges;
     ctx->tid = i;
     ctxs[i] = ctx;
 
@@ -199,7 +201,7 @@ int main(int argc, char *argv[]){
   printf("Accumulating neighbor counts...");
   CSR_cumul_neigh_count();
   printf("Done.\n");
-  CSR_alloc_neigh(num_edges);
+  CSR_alloc_neigh(el->num_edges);
 
  
   /*Done with bin read for neighbor count.  Now bin read for neighbor pop*/
@@ -216,7 +218,7 @@ int main(int argc, char *argv[]){
  
  
   printf("Ejecting CSR...");
-  CSR_out(argv[2],num_edges);
+  CSR_out(argv[2],el->num_edges);
   printf("Done.\n");
  
 }

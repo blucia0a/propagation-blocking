@@ -10,16 +10,22 @@
 #define e2key(x,y) (x)
 #define e2val(x,y) (y)
 
+#include "el.h"
+
 typedef unsigned long vertex_t;
 typedef unsigned long val_t;
 typedef struct edge {
+
   vertex_t src;
   vertex_t dst;
+
 } edge_t;
 
 typedef struct bin_elem{
+
   vertex_t key;
   val_t val;
+
 } bin_elem_t;
 
 typedef struct bin_ctx {
@@ -35,7 +41,8 @@ typedef struct thd_binner {
 
   int tid;
   unsigned long thd_edges;
-  char *el;
+  el_t *el;
+  char *el_ptr;
 
 } thd_binner_t;
 

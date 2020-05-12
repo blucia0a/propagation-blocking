@@ -9,32 +9,40 @@
 #include <errno.h>
 
 #include "pb.h"
+#include "el.h"
 
-int fd; /*graph fd*/
 
-char *init_el_file(char *f, unsigned long *num_edges){
+el_t *init_el_file(char *f){
+
+  el_t *el = (el_t *)malloc(sizeof(el_t));
 
   printf("Loading [%s]...",f);
   struct stat stat;
-  fd = open(f,O_RDONLY,0);
+  int fd = open(f,O_RDONLY,0);
   if( fd == -1 ){  
 
     fprintf(stderr,"bad edgelist file\n");
     exit(0); 
 
   }
+  el->fd = fd;
 
   fstat(fd,&stat);
   size_t sz = stat.st_size;
   *num_edges = sz / (sizeof(vertex_t) * 2);
   fprintf(stderr,"Loading %lu edges\n",*num_edges);
 
-  char *el = 
+  el->num_edges = num_edges;
+  el->num_vtx = 0; /*if num_vtx is 0, haven't counted vertices yet*/
+
+  char *map_el = 
     mmap(NULL, sz, PROT_READ, MAP_PRIVATE /*| MAP_HUGETLB | MAP_HUGE_1GB*/, fd, 0);
 
-  if( el == MAP_FAILED ){
+  if( map_el == MAP_FAILED ){
     fprintf(stderr,"bad edgelist map attempt\n");
   }
+
+  el->el = map_el;
 
   printf("Done.\n");
   return el;
