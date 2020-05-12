@@ -35,13 +35,13 @@ void thd_CSR_count_neigh(void *vctx){
 
     for(int i = bins_per_thd * tid; i < bins_per_thd * (tid + 1); i++){
       
-      for(int j = 0; j < (*ctx->bin_sz)[h][i]; j++){
+      for(int j = 0; j < (ctx->bin_sz)[h][i]; j++){
 
          /* Each thread is operating on bins with
             disjoint keys.  The elements of CSR_offset_array
             that each thread accesses will be disjoint
             avoiding the need for synchronization */
-        unsigned long ind = (*ctx->bins)[h][i][j].key;  
+        unsigned long ind = (ctx->bins)[h][i][j].key;  
         CSR_offset_array[ ind ]++; 
         total_neighs++;
 
@@ -104,10 +104,10 @@ void thd_CSR_neigh_pop(void *vctx){
 
     for(int i = bins_per_thd * tid; i < bins_per_thd * (tid + 1); i++){
   
-      for(int j = 0; j < (*ctx->bin_sz)[h][i]; j++){
+      for(int j = 0; j < (ctx->bin_sz)[h][i]; j++){
 
-        vertex_t key = (*ctx->bins)[h][i][j].key;
-        val_t val = (*ctx->bins)[h][i][j].val;
+        vertex_t key = (ctx->bins)[h][i][j].key;
+        val_t val = (ctx->bins)[h][i][j].val;
 
         unsigned long neigh_ind = CSR_offset_array[key];
         CSR_neigh_array[ neigh_ind ] = val;

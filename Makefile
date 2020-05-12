@@ -3,7 +3,7 @@ CFLAGS = -g -Og -pthread
 LFLAGS = 
 LIBS   = 
 
-SRCS = csr.c pb.c futil.c 
+SRCS = csr.c pb.c el.c 
 OBJS = $(SRCS:.c=.o)
 
 MAIN = pb 

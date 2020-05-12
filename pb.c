@@ -11,7 +11,6 @@
 
 #include "pb.h"
 #include "csr.h"
-#include "futil.h"
 
 /*Total number of edges in the graph*/
 unsigned long num_edges;
@@ -33,7 +32,7 @@ void thd_bin_init(thd_binner_t *t){
   /*el = [s,d,s,d,s,d,s,d,s...]*/
   /*     |------num_edges-----|*/
   int tid = t->tid;
-  vertex_t *cur = (vertex_t *)(t->el);
+  vertex_t *cur = (vertex_t *)(t->el_ptr);
   for(int i = 0; i < t->thd_edges; i++){ 
 
     vertex_t src = *cur;
@@ -69,7 +68,7 @@ void thd_bin(void *v_thd_binner_t){
   unsigned long bin_i[NUM_BINS];
   memset( bin_i, 0, NUM_BINS * sizeof(unsigned long));
 
-  vertex_t *cur = (vertex_t *)t->el;
+  vertex_t *cur = (vertex_t *)t->el_ptr;
   for(int i = 0; i < t->thd_edges; i++){ 
 
     vertex_t src = *cur;
@@ -128,15 +127,27 @@ void* thd_main_binread_npop (void *vtid){
   return NULL;
 }
 
-int main(int argc, char *argv[]){
 
-  el_t *el = init_el_file(argv[1]);
+bin_ctx_t *par_bin(el_t *el){
 
   unsigned long norm_thd_edges = el->num_edges / NUM_THDS;
   unsigned long last_thd_edges = el->num_edges % NUM_THDS;
 
+  bin_ctx_t *bin_ctx = (bin_ctx_t*)malloc(sizeof(bin_ctx));
+
+  int **alloc_bin_sz = (int **)malloc(sizeof(int*) * NUM_THDS); 
+  for(int i = 0; i < NUM_THDS; i++){
+    alloc_bin_sz[i] = (int *)malloc(sizeof(int) * NUM_BINS);
+  }
+  bin_ctx->bin_sz = alloc_bin_sz;
+
+  bin_elem_t ***alloc_bins = (bin_elem_t ***)malloc(sizeof(bin_elem_t**) * NUM_THDS);
+  for(int i = 0; i < NUM_THDS; i++){
+    alloc_bins[i] = (bin_elem_t **)malloc(sizeof(bin_elem_t *) * NUM_BINS);  
+  }
+  bin_ctx->bins = alloc_bins;
+
   thd_binner_t *binners[NUM_THDS];
-  printf("Binning...");
   for(int i = 0; i < NUM_THDS - 1; i++){
 
     thd_binner_t *t = (thd_binner_t*)malloc(sizeof(thd_binner_t));
@@ -145,9 +156,6 @@ int main(int argc, char *argv[]){
     t->thd_edges = norm_thd_edges;
     t->el = el;
     binners[i] = t;
-
-    /*release thd_edges[i] to worker thread here*/
- 
     pthread_create(thds + i,NULL,thd_main_bin,(void*)t);
 
   } 
@@ -162,10 +170,27 @@ int main(int argc, char *argv[]){
   binners[NUM_THDS - 1] = t;
   pthread_create(thds + NUM_THDS - 1,NULL,thd_main_bin,(void*)t);
 
+
   for(int i = 0; i < NUM_THDS; i++){
     pthread_join(thds[i],NULL);
     free(binners[i]);
   }
+
+  return bin_ctx;
+
+}
+
+void par_binread_count(el_t *el){
+
+}
+
+int main(int argc, char *argv[]){
+
+  el_t *el = init_el_file(argv[1]);
+
+
+  printf("Binning...");
+  bin_ctx_t *g_ctx = par_bin(el);
   printf("Done.\n");
 
   /*Done with binning. Now bin read*/
@@ -174,8 +199,8 @@ int main(int argc, char *argv[]){
   for(int i = 0; i < NUM_THDS; i++){
 
     bin_ctx_t *ctx = (bin_ctx_t *)malloc(sizeof(bin_ctx_t)); 
-    ctx->bin_sz = &bin_sz;
-    ctx->bins = &bins;
+    ctx->bin_sz = g_ctx->bin_sz;
+    ctx->bins = g_ctx->bins;
     ctx->num_edges = el->num_edges;
     ctx->tid = i;
     ctxs[i] = ctx;

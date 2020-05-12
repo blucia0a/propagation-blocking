@@ -29,8 +29,8 @@ el_t *init_el_file(char *f){
 
   fstat(fd,&stat);
   size_t sz = stat.st_size;
-  *num_edges = sz / (sizeof(vertex_t) * 2);
-  fprintf(stderr,"Loading %lu edges\n",*num_edges);
+  unsigned long num_edges = sz / (sizeof(vertex_t) * 2);
+  fprintf(stderr,"Loading %lu edges\n",num_edges);
 
   el->num_edges = num_edges;
   el->num_vtx = 0; /*if num_vtx is 0, haven't counted vertices yet*/
