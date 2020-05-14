@@ -4,12 +4,6 @@
 #include "csr.h"
 #include "graph.h"
 
-/*TODO: factor par_binread_{count | npop} into a generic binread that takes a
- * bin_ctx_t * and a function pointer to a function that works on a bin_ctx_t *
- * 
- * THen, move main to main.c and move all mention of CSR to csr.c or main.c
- * pb.c/.h is purely about EL and bins
- * */
 int main(int argc, char *argv[]){
 
   el_t *el = init_el_file(argv[1]);

@@ -117,17 +117,6 @@ void* thd_main_bin (void *v_thd_binner_t){
   return NULL;
 }
 
-void* thd_main_binread_count (void *vtid){
-
-  CSR_count_neigh(vtid);
-  return NULL;
-}
-
-void* thd_main_binread_npop (void *vtid){
-
-  CSR_neigh_pop(vtid);
-  return NULL;
-}
 
 
 bin_ctx_t *par_bin(el_t *el){
@@ -182,66 +171,7 @@ bin_ctx_t *par_bin(el_t *el){
 
 }
 
-void par_binread_count(bin_ctx_t *g_ctx){
- 
-/*
-  bin_ctx_t *ctxs[NUM_THDS];
-  for(int i = 0; i < NUM_THDS; i++){
 
-    bin_ctx_t *ctx = (bin_ctx_t *)malloc(sizeof(bin_ctx_t)); 
-    ctx->bin_sz = g_ctx->bin_sz;
-    ctx->bins = g_ctx->bins;
-    ctx->num_edges = g_ctx->num_edges;
-    ctx->tid = i;
-    ctx->data = (void*)g_oa;
-    ctxs[i] = ctx;
-
-  }
-
-
-  for(int i = 0; i < NUM_THDS; i++){
-
-    pthread_create(thds + i,NULL,thd_main_binread_count,(void*)ctxs[i]);
-
-  } 
-
-  for(int i = 0; i < NUM_THDS; i++){
-    pthread_join(thds[i],NULL);
-    free(ctxs[i]);
-  }
-*/
-}
-
-void par_binread_npop(bin_ctx_t *g_ctx){
- 
-  csr_t *csr = (csr_t *)g_ctx->data;
-  bin_ctx_t *ctxs[NUM_THDS];
-  for(int i = 0; i < NUM_THDS; i++){
-
-    bin_ctx_t *ctx = (bin_ctx_t *)malloc(sizeof(bin_ctx_t)); 
-    ctx->bin_sz = g_ctx->bin_sz;
-    ctx->bins = g_ctx->bins;
-    ctx->num_edges = g_ctx->num_edges;
-    ctx->tid = i;
-    ctx->data = (void*)csr;
-    ctxs[i] = ctx;
-    
-
-  }
-
-
-  for(int i = 0; i < NUM_THDS; i++){
-
-    pthread_create(thds + i,NULL,thd_main_binread_npop,(void*)ctxs[i]);
-
-  } 
-
-  for(int i = 0; i < NUM_THDS; i++){
-    pthread_join(thds[i],NULL);
-    free(ctxs[i]);
-  }
-
-}
 
 void par_binread_generic(bin_ctx_t *g_ctx, void *(*binread_func)(void*)){
  
