@@ -33,7 +33,6 @@ csr_offset_t *CSR_alloc_neigh_array(unsigned long size){
 }
 
 
-
 void CSR_cumul_neigh_count(csr_offset_t *CSR_offset_array, csr_offset_t *CSR_offset_array_out){
 
   unsigned long sum_so_far = 0; 

@@ -35,6 +35,8 @@ typedef struct thd_binner {
   unsigned long thd_edges;
   el_t *el;
   char *el_ptr;
+  int **bin_sz;
+  bin_elem_t ***bins;
 
 } thd_binner_t;
 

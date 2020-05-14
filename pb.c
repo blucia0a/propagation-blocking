@@ -15,14 +15,14 @@
 #include "el.h"
 
 /*Total number of edges in the graph*/
-unsigned long num_edges;
+//unsigned long num_edges;
 /*Number of edges that a thread works on */
-unsigned long thd_edges[NUM_THDS];
+//unsigned long thd_edges[NUM_THDS];
 
-pthread_t thds[NUM_THDS];
+//pthread_t thds[NUM_THDS];
 
-int bin_sz[NUM_THDS][NUM_BINS];
-bin_elem_t *bins[NUM_THDS][NUM_BINS];
+//int bin_sz[NUM_THDS][NUM_BINS];
+//bin_elem_t *bins[NUM_THDS][NUM_BINS];
 
 
 /*Argument el is the thread's starting 
@@ -38,7 +38,7 @@ void thd_bin_init(thd_binner_t *t){
   for(int i = 0; i < t->thd_edges; i++){ 
 
     vertex_t src = *cur;
-    (bin_sz[tid][ src % NUM_BINS ]) ++;    
+    (t->bin_sz[tid][ src % NUM_BINS ]) ++;    
     cur = cur + 2; 
 
     /*
@@ -52,7 +52,7 @@ void thd_bin_init(thd_binner_t *t){
 
     /*An element of a bin contains a source key and an update value*/
     /*For now, these are both the size of a vertex_t*/
-    bins[tid][i] = (bin_elem_t *)malloc( bin_sz[tid][i] * sizeof(bin_elem_t) );
+    t->bins[tid][i] = (bin_elem_t *)malloc( t->bin_sz[tid][i] * sizeof(bin_elem_t) );
 
   }
 
@@ -82,8 +82,8 @@ void thd_bin(void *v_thd_binner_t){
     int ind = bin_i[ e2bin(src,dst) ]; 
     (bin_i[ e2bin(src,dst) ])++;
 
-    bins[t->tid][e2bin(src,dst)][ ind ].key = e2key(src,dst);
-    bins[t->tid][e2bin(src,dst)][ ind ].val = e2val(src,dst);
+    t->bins[t->tid][e2bin(src,dst)][ ind ].key = e2key(src,dst);
+    t->bins[t->tid][e2bin(src,dst)][ ind ].val = e2val(src,dst);
 
   }
 
@@ -95,12 +95,12 @@ void thd_dump_bins(void *v_thd_binner_t){
   int tid = t->tid;
   for(int i = 0; i < NUM_BINS; i++){
 
-    printf("Bin %d (%d edges)\n", i, bin_sz[tid][i]);
+    printf("Bin %d (%d edges)\n", i, t->bin_sz[tid][i]);
 
     
-    for(int j = 0; j < bin_sz[tid][i]; j++){
+    for(int j = 0; j < t->bin_sz[tid][i]; j++){
 
-      printf("\t%lu %lu\n", bins[tid][i][j].key, bins[tid][i][j].val);
+      printf("\t%lu %lu\n", t->bins[tid][i][j].key, t->bins[tid][i][j].val);
 
     }
 
@@ -121,6 +121,7 @@ void* thd_main_bin (void *v_thd_binner_t){
 
 bin_ctx_t *par_bin(el_t *el){
 
+  pthread_t thds[NUM_THDS];
   unsigned long norm_thd_edges = el->num_edges / NUM_THDS;
   unsigned long last_thd_edges = el->num_edges % NUM_THDS;
 
@@ -146,6 +147,8 @@ bin_ctx_t *par_bin(el_t *el){
     t->el_ptr = el->el + 2 * sizeof(vertex_t) * i;
     t->thd_edges = norm_thd_edges;
     t->el = el;
+    t->bin_sz = bin_ctx->bin_sz;
+    t->bins = bin_ctx->bins;
     binners[i] = t;
     pthread_create(thds + i,NULL,thd_main_bin,(void*)t);
 
@@ -158,6 +161,8 @@ bin_ctx_t *par_bin(el_t *el){
   t->el = el;
   t->el_ptr = el->el + 2 * sizeof(vertex_t) * (NUM_THDS - 1);
   t->thd_edges = last_thd_edges;
+  t->bin_sz = bin_ctx->bin_sz;
+  t->bins = bin_ctx->bins;
   binners[NUM_THDS - 1] = t;
   pthread_create(thds + NUM_THDS - 1,NULL,thd_main_bin,(void*)t);
 
@@ -174,7 +179,8 @@ bin_ctx_t *par_bin(el_t *el){
 
 
 void par_binread_generic(bin_ctx_t *g_ctx, void *(*binread_func)(void*)){
- 
+
+  pthread_t thds[NUM_THDS]; 
   bin_ctx_t *ctxs[NUM_THDS];
   for(int i = 0; i < NUM_THDS; i++){
 
