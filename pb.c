@@ -14,17 +14,6 @@
 #include "graph.h"
 #include "el.h"
 
-/*Total number of edges in the graph*/
-//unsigned long num_edges;
-/*Number of edges that a thread works on */
-//unsigned long thd_edges[NUM_THDS];
-
-//pthread_t thds[NUM_THDS];
-
-//int bin_sz[NUM_THDS][NUM_BINS];
-//bin_elem_t *bins[NUM_THDS][NUM_BINS];
-
-
 /*Argument el is the thread's starting 
 pointer into the global el array*/
 void thd_bin_init(thd_binner_t *t){
@@ -38,13 +27,8 @@ void thd_bin_init(thd_binner_t *t){
   for(int i = 0; i < t->thd_edges; i++){ 
 
     vertex_t src = *cur;
-    (t->bin_sz[tid][ src % NUM_BINS ]) ++;    
+    t->bin_sz[tid][ src % NUM_BINS ]++;    
     cur = cur + 2; 
-
-    /*
-    vertex_t dst = *cur;
-    cur++;
-    */
 
   }
 
@@ -63,10 +47,7 @@ void thd_bin(void *v_thd_binner_t){
 
   thd_binner_t *t = (thd_binner_t*)v_thd_binner_t;
 
-  /*
-    Local counters for the bin this thread is currently
-    processing
-  */
+  /* Local counters for the bin this thread is currently processing */
   unsigned long bin_i[NUM_BINS];
   memset( bin_i, 0, NUM_BINS * sizeof(unsigned long));
 
@@ -80,7 +61,7 @@ void thd_bin(void *v_thd_binner_t){
     cur++;  
    
     int ind = bin_i[ e2bin(src,dst) ]; 
-    (bin_i[ e2bin(src,dst) ])++;
+    bin_i[ e2bin(src,dst) ]++;
 
     t->bins[t->tid][e2bin(src,dst)][ ind ].key = e2key(src,dst);
     t->bins[t->tid][e2bin(src,dst)][ ind ].val = e2val(src,dst);
@@ -89,6 +70,7 @@ void thd_bin(void *v_thd_binner_t){
 
 }
 
+
 void thd_dump_bins(void *v_thd_binner_t){
 
   thd_binner_t *t = (thd_binner_t*)v_thd_binner_t;
@@ -96,7 +78,6 @@ void thd_dump_bins(void *v_thd_binner_t){
   for(int i = 0; i < NUM_BINS; i++){
 
     printf("Bin %d (%d edges)\n", i, t->bin_sz[tid][i]);
-
     
     for(int j = 0; j < t->bin_sz[tid][i]; j++){
 
@@ -111,13 +92,29 @@ void thd_dump_bins(void *v_thd_binner_t){
 
 void* thd_main_bin (void *v_thd_binner_t){
 
+  /*This runs in a thread responsible for binning part of the edgelist
+    that is stored in the thd_binner_t context object*/
   thd_binner_t *t = (thd_binner_t*)v_thd_binner_t;
+
   thd_bin_init(t);
+
   thd_bin(t);
+
   return NULL;
+
 }
 
+thd_binner_t *init_binner(el_t *el, int tid, unsigned long num_edges, 
+                             int **bin_sz, bin_elem_t ***bins){
 
+    thd_binner_t *t = (thd_binner_t*)malloc(sizeof(thd_binner_t));
+    t->tid = tid;
+    t->el_ptr = el->el + 2 * sizeof(vertex_t) * tid;
+    t->thd_edges = num_edges;
+    t->el = el;
+    t->bin_sz = bin_sz;
+    t->bins = bins;
+}
 
 bin_ctx_t *par_bin(el_t *el){
 
@@ -142,29 +139,15 @@ bin_ctx_t *par_bin(el_t *el){
   thd_binner_t *binners[NUM_THDS];
   for(int i = 0; i < NUM_THDS - 1; i++){
 
-    thd_binner_t *t = (thd_binner_t*)malloc(sizeof(thd_binner_t));
-    t->tid = i;
-    t->el_ptr = el->el + 2 * sizeof(vertex_t) * i;
-    t->thd_edges = norm_thd_edges;
-    t->el = el;
-    t->bin_sz = bin_ctx->bin_sz;
-    t->bins = bin_ctx->bins;
-    binners[i] = t;
-    pthread_create(thds + i,NULL,thd_main_bin,(void*)t);
+    binners[i] = init_binner(el,i,norm_thd_edges,
+                             bin_ctx->bin_sz,bin_ctx->bins);
+    pthread_create(thds + i,NULL,thd_main_bin,(void*)binners[i]);
 
   } 
 
-  /*The edges won't evenly divide by thread count, so the last
-    thread gets a little bit less work to do */
-  thd_binner_t *t = (thd_binner_t*)malloc(sizeof(thd_binner_t));
-  t->tid = NUM_THDS - 1;
-  t->el = el;
-  t->el_ptr = el->el + 2 * sizeof(vertex_t) * (NUM_THDS - 1);
-  t->thd_edges = last_thd_edges;
-  t->bin_sz = bin_ctx->bin_sz;
-  t->bins = bin_ctx->bins;
-  binners[NUM_THDS - 1] = t;
-  pthread_create(thds + NUM_THDS - 1,NULL,thd_main_bin,(void*)t);
+  binners[NUM_THDS - 1] = init_binner(el, NUM_THDS - 1, last_thd_edges,
+                                      bin_ctx->bin_sz, bin_ctx->bins);
+  pthread_create(thds + NUM_THDS - 1,NULL,thd_main_bin,(void*)binners[NUM_THDS-1]);
 
 
   for(int i = 0; i < NUM_THDS; i++){
@@ -191,7 +174,6 @@ void par_binread_generic(bin_ctx_t *g_ctx, void *(*binread_func)(void*)){
     ctx->tid = i;
     ctx->data = g_ctx->data;
     ctxs[i] = ctx;
-    
 
   }
 
