@@ -184,11 +184,7 @@ bin_ctx_t *par_bin(el_t *el){
 
 void par_binread_count(bin_ctx_t *g_ctx){
  
-  csr_offset_t *g_oa = CSR_alloc_offset_array(MAX_VTX);
-
-  /*This is effectively the return value, via g_ctx*/
-  g_ctx->data = (void*)g_oa;
-
+/*
   bin_ctx_t *ctxs[NUM_THDS];
   for(int i = 0; i < NUM_THDS; i++){
 
@@ -199,7 +195,6 @@ void par_binread_count(bin_ctx_t *g_ctx){
     ctx->tid = i;
     ctx->data = (void*)g_oa;
     ctxs[i] = ctx;
-    
 
   }
 
@@ -214,7 +209,7 @@ void par_binread_count(bin_ctx_t *g_ctx){
     pthread_join(thds[i],NULL);
     free(ctxs[i]);
   }
-
+*/
 }
 
 void par_binread_npop(bin_ctx_t *g_ctx){
@@ -248,6 +243,36 @@ void par_binread_npop(bin_ctx_t *g_ctx){
 
 }
 
+void par_binread_generic(bin_ctx_t *g_ctx, void *(*binread_func)(void*)){
+ 
+  bin_ctx_t *ctxs[NUM_THDS];
+  for(int i = 0; i < NUM_THDS; i++){
+
+    bin_ctx_t *ctx = (bin_ctx_t *)malloc(sizeof(bin_ctx_t)); 
+    ctx->bin_sz = g_ctx->bin_sz;
+    ctx->bins = g_ctx->bins;
+    ctx->num_edges = g_ctx->num_edges;
+    ctx->tid = i;
+    ctx->data = g_ctx->data;
+    ctxs[i] = ctx;
+    
+
+  }
+
+
+  for(int i = 0; i < NUM_THDS; i++){
+
+    pthread_create(thds + i,NULL,binread_func,(void*)ctxs[i]);
+
+  } 
+
+  for(int i = 0; i < NUM_THDS; i++){
+    pthread_join(thds[i],NULL);
+    free(ctxs[i]);
+  }
+
+}
+
 /*TODO: factor par_binread_{count | npop} into a generic binread that takes a
  * bin_ctx_t * and a function pointer to a function that works on a bin_ctx_t *
  * 
@@ -265,8 +290,11 @@ int main(int argc, char *argv[]){
 
   /*Done with binning. Now bin read*/
   
+  csr_offset_t *g_oa = CSR_alloc_offset_array(MAX_VTX);
+  g_ctx->data = (void*)g_oa;
+  
   printf("Counting neighbors...");
-  par_binread_count(g_ctx);
+  par_binread_generic(g_ctx, (void *(*)(void*))CSR_count_neigh);
   printf("Done.\n");
 
   csr_offset_t *oa = (csr_offset_t *)g_ctx->data;
@@ -288,7 +316,7 @@ int main(int argc, char *argv[]){
 
   printf("Populating neighbors...");
   g_ctx->data = (void*)csr;
-  par_binread_npop(g_ctx);
+  par_binread_generic(g_ctx, (void *(*)(void*))CSR_neigh_pop);
   printf("Done.\n");
  
  
