@@ -177,7 +177,6 @@ void par_binread_generic(bin_ctx_t *g_ctx, void *(*binread_func)(void*)){
 
   }
 
-
   for(int i = 0; i < NUM_THDS; i++){
 
     pthread_create(thds + i,NULL,binread_func,(void*)ctxs[i]);
