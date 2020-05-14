@@ -33,45 +33,6 @@ csr_offset_t *CSR_alloc_neigh_array(unsigned long size){
 }
 
 
-/*This is a binread implementation function.  It is currently
-written with poor modularity to avoid doing a function call
-in the inner loop of the bin reading traversal, in this case
-to increment the CSR offset array*/
-void CSR_count_neigh(void *vctx){
-
-  /*
-    Bin Read Phase - Each thread processes a subset of bins to
-    have a disjoint set of elements in the offset_array
-  */
-  bin_ctx_t *ctx = (bin_ctx_t*)vctx;
-  int tid = ctx->tid;
-
-  /* This code assumes that NUM_BINS 
-     divides evenly by NUM_THDS */ 
-  int bins_per_thd = NUM_BINS / NUM_THDS;
-  csr_offset_t *CSR_offset_array = (csr_offset_t *)ctx->data;
-  unsigned long total_neighs = 0;
-  for(int h = 0; h < NUM_THDS; h++){
-
-    for(int i = bins_per_thd * tid; i < bins_per_thd * (tid + 1); i++){
-      
-      for(int j = 0; j < (ctx->bin_sz)[h][i]; j++){
-
-         /* Each thread is operating on bins with
-            disjoint keys.  The elements of CSR_offset_array
-            that each thread accesses will be disjoint
-            avoiding the need for synchronization */
-        unsigned long ind = (ctx->bins)[h][i][j].key;  
-        CSR_offset_array[ind]++; 
-        total_neighs++;
-
-      }
-
-    }
-
-  }
-
-}
 
 void CSR_cumul_neigh_count(csr_offset_t *CSR_offset_array, csr_offset_t *CSR_offset_array_out){
 
@@ -104,39 +65,84 @@ void CSR_print_neigh_counts(csr_offset_t *CSR_offset_array){
 }
 
 
+/*This is a binread implementation function.  It is currently
+written with poor modularity to avoid doing a function call
+in the inner loop of the bin reading traversal, in this case
+to increment the CSR offset array*/
+void *CSR_count_neigh(void *vctx){
+
+  /*
+    Bin Read Phase - Each thread processes a subset of bins to
+    have a disjoint set of elements in the offset_array
+  */
+
+/*Generic*/
+  bin_ctx_t *ctx = (bin_ctx_t*)vctx;
+  int tid = ctx->tid;
+  int bins_per_thd = NUM_BINS / NUM_THDS;
+
+
+/*CSR - Specific*/
+  csr_offset_t *CSR_offset_array = (csr_offset_t *)ctx->data;
+
+  for(int h = 0; h < NUM_THDS; h++){
+    for(int i = bins_per_thd * tid; i < bins_per_thd * (tid + 1); i++){
+      for(int j = 0; j < (ctx->bin_sz)[h][i]; j++){
+
+         /* Each thread is operating on bins with
+            disjoint keys.  The elements of CSR_offset_array
+            that each thread accesses will be disjoint
+            avoiding the need for synchronization */
+/*CSR - Specific*/
+        unsigned long ind = (ctx->bins)[h][i][j].key;  
+        CSR_offset_array[ind]++; 
+
+      }
+
+    }
+
+  }
+  return NULL;
+
+}
+
+
 /*This is another binread function, like the one that
   counts adjacencies above.  This is "inlined" like the other
   one at a cost in modularity, but at a benefit in performance,
   avoiding any abstraction/modularity overheads in the inner loop
 */
-void CSR_neigh_pop(void *vctx){
+void *CSR_neigh_pop(void *vctx){
 
+
+/*Generic - binread*/
   bin_ctx_t *ctx = (bin_ctx_t*)vctx;
+  int tid = ctx->tid;
+  int bins_per_thd = NUM_BINS / NUM_THDS;
+
+/*CSR-specific*/
   csr_t *csr = (csr_t *)ctx->data;
   csr_offset_t *CSR_offset_array = csr->oa;
   csr_vertex_t *CSR_neigh_array = csr->na;
 
-  int tid = ctx->tid;
-  int bins_per_thd = NUM_BINS / NUM_THDS;
-
-  unsigned long total_neighs = 0;
   for(int h = 0; h < NUM_THDS; h++){
-
     for(int i = bins_per_thd * tid; i < bins_per_thd * (tid + 1); i++){
-  
       for(int j = 0; j < (ctx->bin_sz)[h][i]; j++){
 
+/*CSR - Specific*/
         vertex_t key = (ctx->bins)[h][i][j].key;
         val_t val = (ctx->bins)[h][i][j].val;
 
         unsigned long neigh_ind = CSR_offset_array[key];
         CSR_neigh_array[ neigh_ind ] = val;
         CSR_offset_array[key] = CSR_offset_array[key] + 1;
+
       }
  
     }
 
   }
+  return NULL;
 
 }
 

@@ -38,5 +38,7 @@ typedef struct thd_binner {
 
 } thd_binner_t;
 
+bin_ctx_t *par_bin(el_t *);
+void par_binread_generic(bin_ctx_t*,void*(*)(void*));
 
 #endif
