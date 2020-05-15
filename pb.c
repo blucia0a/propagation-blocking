@@ -36,7 +36,8 @@ void thd_bin_init(thd_binner_t *t){
 
     /*An element of a bin contains a source key and an update value*/
     /*For now, these are both the size of a vertex_t*/
-    t->bins[tid][i] = (bin_elem_t *)malloc( t->bin_sz[tid][i] * sizeof(bin_elem_t) );
+    t->bins[tid][i] = 
+           (bin_elem_t *)malloc( t->bin_sz[tid][i] * sizeof(bin_elem_t) );
 
   }
 
