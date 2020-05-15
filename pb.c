@@ -114,6 +114,7 @@ thd_binner_t *init_binner(el_t *el, int tid, unsigned long num_edges,
     t->el = el;
     t->bin_sz = bin_sz;
     t->bins = bins;
+    return t;
 }
 
 bin_ctx_t *par_bin(el_t *el){
@@ -139,15 +140,17 @@ bin_ctx_t *par_bin(el_t *el){
   thd_binner_t *binners[NUM_THDS];
   for(int i = 0; i < NUM_THDS - 1; i++){
 
-    binners[i] = init_binner(el,i,norm_thd_edges,
-                             bin_ctx->bin_sz,bin_ctx->bins);
-    pthread_create(thds + i,NULL,thd_main_bin,(void*)binners[i]);
+    thd_binner_t *t = init_binner(el,i,norm_thd_edges,
+                                 bin_ctx->bin_sz,bin_ctx->bins);
+    binners[i] = t;
+    pthread_create(thds + i,NULL,thd_main_bin,(void*)t);
 
   } 
 
-  binners[NUM_THDS - 1] = init_binner(el, NUM_THDS - 1, last_thd_edges,
+  thd_binner_t *t = init_binner(el, NUM_THDS - 1, last_thd_edges,
                                       bin_ctx->bin_sz, bin_ctx->bins);
-  pthread_create(thds + NUM_THDS - 1,NULL,thd_main_bin,(void*)binners[NUM_THDS-1]);
+  binners[NUM_THDS - 1] = t;
+  pthread_create(thds + NUM_THDS - 1,NULL,thd_main_bin,(void*)t);
 
 
   for(int i = 0; i < NUM_THDS; i++){
