@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -g -O1 -pthread
+CFLAGS = -O3 -pthread
 LFLAGS = 
 LIBS   = 
 
