@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <pthread.h>
 
+#include "el.h"
 #include "pb.h"
 #include "csr.h"
 #include "graph.h"
@@ -212,6 +213,6 @@ csr_t *CSR_in(char *fname){
 
 } 
 
-el_t * CSR_el(csr_t *){
+el_t * CSR_el(csr_t *csr){
 
 }
