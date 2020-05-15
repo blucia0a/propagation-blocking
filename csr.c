@@ -207,3 +207,11 @@ void CSR_out(char *out, unsigned long num_edges, csr_t *csr_data){
   printf("Done.\n");
   
 }
+
+csr_t *CSR_in(char *fname){
+
+} 
+
+el_t * CSR_el(csr_t *){
+
+}
